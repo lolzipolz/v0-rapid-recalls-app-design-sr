@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, Mail, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 
@@ -18,7 +18,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
-  const handleSendMagicLink = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!email.trim()) {
@@ -26,7 +26,8 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
       return
     }
 
-    if (!email.includes("@") || !email.includes(".")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
       setMessage({ type: "error", text: "Please enter a valid email address" })
       return
     }
@@ -37,8 +38,10 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
     try {
       const response = await fetch("/api/auth/send-magic-link", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email.trim() }),
       })
 
       const data = await response.json()
@@ -51,7 +54,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
 
         // In development, show the magic link
         if (data.magicLink && process.env.NODE_ENV === "development") {
-          console.log("🔗 Magic link (dev only):", data.magicLink)
+          console.log("Magic link:", data.magicLink)
         }
       } else {
         setMessage({
@@ -71,92 +74,132 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to RapidRecalls</h1>
-            <p className="text-gray-600">Stay safe with instant product recall alerts</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* Header */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center mb-8">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mr-3">
+            <Shield className="w-6 h-6 text-white" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900">RapidRecalls</h1>
+        </div>
 
-          {/* Features */}
-          <div className="space-y-3 mb-8">
-            <div className="flex items-center gap-3 text-sm text-gray-700">
-              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-              <span>Real-time government recall monitoring</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-gray-700">
-              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-              <span>Smart product matching with photos</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-gray-700">
-              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-              <span>Instant email alerts for your products</span>
-            </div>
-          </div>
-
-          {/* Magic Link Form */}
-          <form onSubmit={handleSendMagicLink} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="pl-10"
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Sending Magic Link...
-                </>
-              ) : (
-                "Send Magic Link"
-              )}
-            </Button>
-          </form>
-
-          {/* Message */}
-          {message && (
-            <Alert
-              className={`mt-4 ${message.type === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
-            >
-              {message.type === "success" ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-red-600" />
-              )}
-              <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>
-                {message.text}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Footer */}
-          <p className="text-xs text-gray-500 text-center mt-6">
-            By continuing, you agree to receive product safety alerts via email. No spam, unsubscribe anytime.
+        {/* Hero Section */}
+        <div className="max-w-4xl mx-auto text-center mb-12">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Never Miss a Product Recall Again</h2>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Get instant alerts when your products are recalled by FDA, CPSC, USDA, or NHTSA. Stay safe with real-time
+            monitoring of government recall databases.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Features Grid */}
+        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 mb-12">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-8 h-8 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Government Sources</h3>
+            <p className="text-gray-600">
+              Monitor FDA, CPSC, USDA, and NHTSA recall databases 24/7 for the latest safety alerts.
+            </p>
+          </div>
+
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Mail className="w-8 h-8 text-green-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Instant Alerts</h3>
+            <p className="text-gray-600">Get email notifications the moment any of your products are recalled.</p>
+          </div>
+
+          <div className="text-center">
+            <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-purple-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Easy Setup</h3>
+            <p className="text-gray-600">
+              Add products by scanning barcodes, uploading receipts, or importing from Amazon.
+            </p>
+          </div>
+        </div>
+
+        {/* Sign Up Form */}
+        <div className="max-w-md mx-auto">
+          <Card className="shadow-xl border-0">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-2xl font-bold text-gray-900">Get Started Free</CardTitle>
+              <CardDescription className="text-gray-600">
+                Enter your email to receive a secure login link
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {message && (
+                <Alert variant={message.type === "error" ? "destructive" : "default"}>
+                  {message.type === "error" ? <AlertCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                  <AlertDescription>{message.text}</AlertDescription>
+                </Alert>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Enter your email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                    className="h-12 text-lg"
+                    required
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-12 text-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Sending Magic Link...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-5 h-5 mr-2" />
+                      Send Magic Link
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              <div className="text-center text-sm text-gray-500 pt-4">
+                <p>
+                  By continuing, you agree to our{" "}
+                  <a href="#" className="text-blue-600 hover:text-blue-700">
+                    Terms of Service
+                  </a>{" "}
+                  and{" "}
+                  <a href="#" className="text-blue-600 hover:text-blue-700">
+                    Privacy Policy
+                  </a>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Trust Indicators */}
+        <div className="max-w-4xl mx-auto mt-12 text-center">
+          <p className="text-sm text-gray-500 mb-4">Trusted by families nationwide</p>
+          <div className="flex justify-center items-center space-x-8 opacity-60">
+            <div className="text-xs font-medium text-gray-400">FDA MONITORED</div>
+            <div className="text-xs font-medium text-gray-400">CPSC ALERTS</div>
+            <div className="text-xs font-medium text-gray-400">USDA TRACKING</div>
+            <div className="text-xs font-medium text-gray-400">NHTSA UPDATES</div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
