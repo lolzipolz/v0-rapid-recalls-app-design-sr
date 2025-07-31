@@ -4,62 +4,51 @@ import { sql, testDatabaseConnection, initializeDatabase } from "@/lib/database"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
-  const results = {
+  const debug = {
     timestamp: new Date().toISOString(),
-    environment: {
-      NODE_ENV: process.env.NODE_ENV,
-      DATABASE_URL_EXISTS: !!process.env.DATABASE_URL,
-      DATABASE_URL_PREFIX: process.env.DATABASE_URL?.substring(0, 20) + "...",
-    },
+    environment: process.env.NODE_ENV,
+    hasDbUrl: !!process.env.DATABASE_URL,
+    dbUrlPrefix: process.env.DATABASE_URL?.substring(0, 20) + "...",
     tests: {} as Record<string, any>,
   }
 
   try {
     // Test 1: Basic connection
-    console.log("🔍 Testing database connection...")
-    await testDatabaseConnection()
-    results.tests.connection = { status: "✅ SUCCESS", message: "Database connection successful" }
+    debug.tests.connection = await testDatabaseConnection()
+      .then(() => ({ success: true, message: "Connection successful" }))
+      .catch((error) => ({ success: false, error: error.message }))
+
+    // Test 2: Database initialization
+    debug.tests.initialization = await initializeDatabase()
+      .then(() => ({ success: true, message: "Schema ready" }))
+      .catch((error) => ({ success: false, error: error.message }))
+
+    // Test 3: Query test
+    if (sql) {
+      debug.tests.query = await sql`SELECT COUNT(*) as user_count FROM users`
+        .then((result) => ({ success: true, userCount: result[0].user_count }))
+        .catch((error) => ({ success: false, error: error.message }))
+    }
+
+    // Test 4: Table check
+    if (sql) {
+      debug.tests.tables = await sql`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        ORDER BY table_name
+      `
+        .then((result) => ({ success: true, tables: result.map((r) => r.table_name) }))
+        .catch((error) => ({ success: false, error: error.message }))
+    }
+
+    return NextResponse.json(debug)
   } catch (error) {
-    results.tests.connection = {
-      status: "❌ FAILED",
+    debug.tests.error = {
+      success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     }
+
+    return NextResponse.json(debug, { status: 500 })
   }
-
-  try {
-    // Test 2: Schema initialization
-    console.log("🔍 Testing schema initialization...")
-    await initializeDatabase()
-    results.tests.schema = { status: "✅ SUCCESS", message: "Schema initialization successful" }
-  } catch (error) {
-    results.tests.schema = {
-      status: "❌ FAILED",
-      error: error instanceof Error ? error.message : "Unknown error",
-    }
-  }
-
-  try {
-    // Test 3: Simple query
-    console.log("🔍 Testing simple query...")
-    const result = await sql`SELECT COUNT(*) as user_count FROM users`
-    results.tests.query = {
-      status: "✅ SUCCESS",
-      message: "Query successful",
-      user_count: result[0].user_count,
-    }
-  } catch (error) {
-    results.tests.query = {
-      status: "❌ FAILED",
-      error: error instanceof Error ? error.message : "Unknown error",
-    }
-  }
-
-  const allTestsPassed = Object.values(results.tests).every((test) => test.status.includes("SUCCESS"))
-
-  return NextResponse.json(results, {
-    status: allTestsPassed ? 200 : 500,
-    headers: {
-      "Content-Type": "application/json",
-    },
-  })
 }
