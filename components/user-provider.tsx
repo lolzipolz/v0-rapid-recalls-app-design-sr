@@ -5,11 +5,20 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 interface User {
   id: string
   email: string
+  email_verified: boolean
+  notification_preferences: {
+    email: boolean
+    push: boolean
+  }
+  created_at: string
+  updated_at: string
 }
 
 interface UserContextType {
   user: User | null
   setUser: (user: User | null) => void
+  signUp: (email: string) => Promise<void>
+  signOut: () => void
   isLoading: boolean
 }
 
@@ -24,7 +33,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem("rapidrecalls_user")
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser))
+        const parsedUser = JSON.parse(savedUser)
+        setUser(parsedUser)
       } catch (error) {
         console.error("Failed to parse saved user:", error)
         localStorage.removeItem("rapidrecalls_user")
@@ -32,6 +42,38 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false)
   }, [])
+
+  const signUp = async (email: string) => {
+    try {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email.toLowerCase().trim() }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to create account")
+      }
+
+      const { user: newUser } = await response.json()
+      setUser(newUser)
+      localStorage.setItem("rapidrecalls_user", JSON.stringify(newUser))
+
+      console.log("✅ User created successfully:", newUser.email)
+    } catch (error) {
+      console.error("❌ Sign up failed:", error)
+      throw error
+    }
+  }
+
+  const signOut = () => {
+    setUser(null)
+    localStorage.removeItem("rapidrecalls_user")
+    console.log("👋 User signed out")
+  }
 
   const updateUser = (newUser: User | null) => {
     setUser(newUser)
@@ -42,7 +84,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  return <UserContext.Provider value={{ user, setUser: updateUser, isLoading }}>{children}</UserContext.Provider>
+  return (
+    <UserContext.Provider
+      value={{
+        user,
+        setUser: updateUser,
+        signUp,
+        signOut,
+        isLoading,
+      }}
+    >
+      {children}
+    </UserContext.Provider>
+  )
 }
 
 export function useUser() {

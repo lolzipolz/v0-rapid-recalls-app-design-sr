@@ -7,7 +7,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     await sql`
       UPDATE matched_recalls 
-      SET resolved_at = NOW()
+      SET resolved_at = NOW() 
       WHERE id = ${id}
     `
 

@@ -1,76 +1,130 @@
 import { NextResponse } from "next/server"
-import { UPCService } from "@/lib/services/upc-service"
+
+// Force dynamic rendering
+export const dynamic = "force-dynamic"
 
 export async function GET() {
   const results = {
-    apis: {
-      fda: { status: "unknown", message: "" },
-      usda: { status: "unknown", message: "" },
-      nhtsa: { status: "unknown", message: "" },
-      cpsc: { status: "unknown", message: "" },
-      openfoodfacts: { status: "unknown", message: "" },
-    },
     timestamp: new Date().toISOString(),
+    apis: {} as Record<string, any>,
   }
 
   // Test FDA API
   try {
-    const fdaResponse = await fetch("https://api.fda.gov/food/enforcement.json?limit=1")
-    if (fdaResponse.ok) {
-      results.apis.fda = { status: "working", message: "FDA API is accessible" }
-    } else {
-      results.apis.fda = { status: "error", message: `FDA API returned ${fdaResponse.status}` }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const fdaResponse = await fetch("https://api.fda.gov/food/enforcement.json?limit=1", {
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    results.apis.fda = {
+      status: fdaResponse.ok ? "✅ Working" : "❌ Error",
+      statusCode: fdaResponse.status,
+      url: "https://api.fda.gov/food/enforcement.json",
     }
   } catch (error) {
-    results.apis.fda = { status: "error", message: "FDA API connection failed" }
+    results.apis.fda = {
+      status: "❌ Timeout/Error",
+      error: error instanceof Error ? error.message : "Unknown error",
+      url: "https://api.fda.gov/food/enforcement.json",
+    }
   }
 
   // Test USDA API
   try {
-    const usdaResponse = await fetch("https://www.fsis.usda.gov/fsis/api/recall")
-    if (usdaResponse.ok) {
-      results.apis.usda = { status: "working", message: "USDA API is accessible" }
-    } else {
-      results.apis.usda = { status: "error", message: `USDA API returned ${usdaResponse.status}` }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const usdaResponse = await fetch("https://www.fsis.usda.gov/fsis/api/recall", {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "RapidRecalls/1.0 (contact@rapidrecalls.com)",
+      },
+    })
+    clearTimeout(timeoutId)
+
+    results.apis.usda = {
+      status: usdaResponse.ok ? "✅ Working" : "❌ Error",
+      statusCode: usdaResponse.status,
+      url: "https://www.fsis.usda.gov/fsis/api/recall",
     }
   } catch (error) {
-    results.apis.usda = { status: "error", message: "USDA API connection failed" }
+    results.apis.usda = {
+      status: "❌ Timeout/Error",
+      error: error instanceof Error ? error.message : "Unknown error",
+      url: "https://www.fsis.usda.gov/fsis/api/recall",
+    }
   }
 
   // Test NHTSA API
   try {
-    const nhtsaResponse = await fetch("https://api.nhtsa.gov/recalls/recallsByVehicle?modelYear=2024")
-    if (nhtsaResponse.ok) {
-      results.apis.nhtsa = { status: "working", message: "NHTSA API is accessible" }
-    } else {
-      results.apis.nhtsa = { status: "error", message: `NHTSA API returned ${nhtsaResponse.status}` }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const nhtsaResponse = await fetch("https://api.nhtsa.gov/recalls/recallsByVehicle?modelYear=2024", {
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    results.apis.nhtsa = {
+      status: nhtsaResponse.ok ? "✅ Working" : "❌ Error",
+      statusCode: nhtsaResponse.status,
+      url: "https://api.nhtsa.gov/recalls/recallsByVehicle",
     }
   } catch (error) {
-    results.apis.nhtsa = { status: "error", message: "NHTSA API connection failed" }
+    results.apis.nhtsa = {
+      status: "❌ Timeout/Error",
+      error: error instanceof Error ? error.message : "Unknown error",
+      url: "https://api.nhtsa.gov/recalls/recallsByVehicle",
+    }
   }
 
   // Test CPSC RSS
   try {
-    const cpscResponse = await fetch("https://www.cpsc.gov/Newsroom/News-Releases/RSS")
-    if (cpscResponse.ok) {
-      results.apis.cpsc = { status: "working", message: "CPSC RSS feed is accessible" }
-    } else {
-      results.apis.cpsc = { status: "error", message: `CPSC RSS returned ${cpscResponse.status}` }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const cpscResponse = await fetch("https://www.cpsc.gov/Newsroom/News-Releases/RSS", {
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    results.apis.cpsc = {
+      status: cpscResponse.ok ? "✅ Working" : "❌ Error",
+      statusCode: cpscResponse.status,
+      url: "https://www.cpsc.gov/Newsroom/News-Releases/RSS",
     }
   } catch (error) {
-    results.apis.cpsc = { status: "error", message: "CPSC RSS connection failed" }
+    results.apis.cpsc = {
+      status: "❌ Timeout/Error",
+      error: error instanceof Error ? error.message : "Unknown error",
+      url: "https://www.cpsc.gov/Newsroom/News-Releases/RSS",
+    }
   }
 
-  // Test OpenFoodFacts
+  // Test OpenFoodFacts (UPC lookup)
   try {
-    const upcService = UPCService.getInstance()
-    const testProduct = await upcService.lookupProduct("0123456789012")
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const offResponse = await fetch("https://world.openfoodfacts.org/api/v0/product/737628064502.json", {
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
     results.apis.openfoodfacts = {
-      status: "working",
-      message: "OpenFoodFacts API is accessible (may return null for invalid UPCs)",
+      status: offResponse.ok ? "✅ Working" : "❌ Error",
+      statusCode: offResponse.status,
+      url: "https://world.openfoodfacts.org/api/v0/product/",
     }
   } catch (error) {
-    results.apis.openfoodfacts = { status: "error", message: "OpenFoodFacts API connection failed" }
+    results.apis.openfoodfacts = {
+      status: "❌ Timeout/Error",
+      error: error instanceof Error ? error.message : "Unknown error",
+      url: "https://world.openfoodfacts.org/api/v0/product/",
+    }
   }
 
   return NextResponse.json(results)
