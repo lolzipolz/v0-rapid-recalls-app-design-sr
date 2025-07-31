@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/database"
+import { sql, initializeDatabase } from "@/lib/database"
 import { cookies } from "next/headers"
 
 export async function POST(request: NextRequest) {
   try {
+    await initializeDatabase()
+
     const cookieStore = cookies()
     const sessionToken = cookieStore.get("session")?.value
 
@@ -19,9 +21,9 @@ export async function POST(request: NextRequest) {
     // Clear session cookie
     cookieStore.delete("session")
 
-    return NextResponse.json({ message: "Logged out successfully" })
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Failed to logout:", error)
+    console.error("❌ Logout error:", error)
     return NextResponse.json({ error: "Logout failed" }, { status: 500 })
   }
 }

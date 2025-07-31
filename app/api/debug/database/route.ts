@@ -1,54 +1,48 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql, testDatabaseConnection, initializeDatabase } from "@/lib/database"
 
-export const dynamic = "force-dynamic"
-
 export async function GET(request: NextRequest) {
-  const debug = {
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    hasDbUrl: !!process.env.DATABASE_URL,
-    dbUrlPrefix: process.env.DATABASE_URL?.substring(0, 20) + "...",
-    tests: {} as Record<string, any>,
-  }
-
   try {
-    // Test 1: Basic connection
-    debug.tests.connection = await testDatabaseConnection()
-      .then(() => ({ success: true, message: "Connection successful" }))
-      .catch((error) => ({ success: false, error: error.message }))
+    console.log("🔍 Testing database connection...")
 
-    // Test 2: Database initialization
-    debug.tests.initialization = await initializeDatabase()
-      .then(() => ({ success: true, message: "Schema ready" }))
-      .catch((error) => ({ success: false, error: error.message }))
+    // Test basic connection
+    await testDatabaseConnection()
 
-    // Test 3: Query test
-    if (sql) {
-      debug.tests.query = await sql`SELECT COUNT(*) as user_count FROM users`
-        .then((result) => ({ success: true, userCount: result[0].user_count }))
-        .catch((error) => ({ success: false, error: error.message }))
+    // Initialize database
+    await initializeDatabase()
+
+    // Get some basic stats
+    const userCount = await sql`SELECT COUNT(*) as count FROM users`
+    const productCount = await sql`SELECT COUNT(*) as count FROM products`
+    const recallCount = await sql`SELECT COUNT(*) as count FROM recalls`
+
+    const stats = {
+      users: userCount[0].count,
+      products: productCount[0].count,
+      recalls: recallCount[0].count,
     }
 
-    // Test 4: Table check
-    if (sql) {
-      debug.tests.tables = await sql`
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-        ORDER BY table_name
-      `
-        .then((result) => ({ success: true, tables: result.map((r) => r.table_name) }))
-        .catch((error) => ({ success: false, error: error.message }))
-    }
-
-    return NextResponse.json(debug)
+    return NextResponse.json({
+      status: "success",
+      message: "Database connection successful",
+      stats,
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        hasDatabase: !!process.env.DATABASE_URL,
+        hasSendGrid: !!process.env.SENDGRID_API_KEY,
+        hasFromEmail: !!process.env.FROM_EMAIL,
+      },
+    })
   } catch (error) {
-    debug.tests.error = {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    }
-
-    return NextResponse.json(debug, { status: 500 })
+    console.error("Database debug error:", error)
+    return NextResponse.json(
+      {
+        status: "error",
+        message: error.message,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 },
+    )
   }
 }

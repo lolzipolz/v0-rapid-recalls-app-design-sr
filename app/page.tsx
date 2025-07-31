@@ -1,76 +1,48 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { WelcomeScreen } from "@/components/welcome-screen"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import WelcomeScreen from "@/components/welcome-screen"
+import { Loader2 } from "lucide-react"
 
-export default function Home() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState(null)
+  const router = useRouter()
 
   useEffect(() => {
-    // Check for error parameters
-    const errorParam = searchParams.get("error")
-    if (errorParam) {
-      switch (errorParam) {
-        case "invalid-link":
-          setError("Invalid login link. Please request a new one.")
-          break
-        case "expired-link":
-          setError("Login link has expired. Please request a new one.")
-          break
-        case "verification-failed":
-          setError("Login verification failed. Please try again.")
-          break
-        default:
-          setError("An error occurred. Please try again.")
-      }
-    }
-
-    // Check if user is already authenticated
-    const checkAuth = async () => {
-      try {
-        const response = await fetch("/api/auth/me")
-        if (response.ok) {
-          router.push("/dashboard")
-          return
-        }
-      } catch (error) {
-        console.log("Not authenticated, showing welcome screen")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     checkAuth()
-  }, [router, searchParams])
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch("/api/auth/me")
+      const data = await response.json()
+
+      if (data.user) {
+        setUser(data.user)
+        router.push("/dashboard")
+      } else {
+        setUser(null)
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error)
+      setUser(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
     )
   }
 
-  return (
-    <div>
-      {error && (
-        <div className="p-4">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        </div>
-      )}
-      <WelcomeScreen onGetStarted={() => router.push("/dashboard")} />
-    </div>
-  )
+  return <WelcomeScreen />
 }

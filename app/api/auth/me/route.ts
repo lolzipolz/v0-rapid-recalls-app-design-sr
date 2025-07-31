@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/database"
+import { getCurrentUser } from "@/lib/database"
 import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest) {
@@ -8,24 +8,21 @@ export async function GET(request: NextRequest) {
     const sessionToken = cookieStore.get("session")?.value
 
     if (!sessionToken) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+      return NextResponse.json({ user: null })
     }
 
-    // Get user from session
-    const users = await sql`
-      SELECT id, email, notification_preferences, created_at, last_login
-      FROM users 
-      WHERE session_token = ${sessionToken}
-      AND session_expires > NOW()
-    `
+    const user = await getCurrentUser(sessionToken)
 
-    if (users.length === 0) {
-      return NextResponse.json({ error: "Session expired" }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ user: null })
     }
 
-    return NextResponse.json({ user: users[0] })
+    // Don't send sensitive data to client
+    const { session_token, magic_link_token, ...safeUser } = user
+
+    return NextResponse.json({ user: safeUser })
   } catch (error) {
-    console.error("Failed to get current user:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("❌ Auth check error:", error)
+    return NextResponse.json({ user: null })
   }
 }
