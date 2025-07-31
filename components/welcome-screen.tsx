@@ -9,11 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, Mail, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 
-interface WelcomeScreenProps {
-  onGetStarted: () => void
-}
-
-export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
+export default function WelcomeScreen() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -54,7 +50,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
 
         // In development, show the magic link
         if (data.magicLink && process.env.NODE_ENV === "development") {
-          console.log("Magic link:", data.magicLink)
+          console.log("🔗 Magic link (dev only):", data.magicLink)
         }
       } else {
         setMessage({

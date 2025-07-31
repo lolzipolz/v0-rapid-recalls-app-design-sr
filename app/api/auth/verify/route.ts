@@ -4,34 +4,27 @@ import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("🔄 Processing magic link verification...")
-
-    // Initialize database first
     await initializeDatabase()
 
     const { searchParams } = new URL(request.url)
     const token = searchParams.get("token")
 
     if (!token) {
-      return NextResponse.redirect(new URL("/?error=invalid-token", request.url))
+      return NextResponse.redirect(new URL("/?error=invalid-link", request.url))
     }
-
-    console.log(`🔍 Verifying token: ${token.substring(0, 8)}...`)
 
     // Find user with valid magic link token
     const users = await sql`
-      SELECT * FROM users 
+      SELECT id, email FROM users 
       WHERE magic_link_token = ${token} 
       AND magic_link_expires > NOW()
     `
 
     if (users.length === 0) {
-      console.log("❌ Invalid or expired token")
-      return NextResponse.redirect(new URL("/?error=expired-token", request.url))
+      return NextResponse.redirect(new URL("/?error=expired-link", request.url))
     }
 
     const user = users[0]
-    console.log(`👤 User found: ${user.email}`)
 
     // Generate session token
     const sessionToken = crypto.randomUUID()
@@ -40,17 +33,19 @@ export async function GET(request: NextRequest) {
     // Update user with session and clear magic link
     await sql`
       UPDATE users 
-      SET session_token = ${sessionToken},
-          session_expires = ${sessionExpires},
-          magic_link_token = NULL,
-          magic_link_expires = NULL,
-          last_login = NOW()
+      SET 
+        session_token = ${sessionToken},
+        session_expires = ${sessionExpires},
+        magic_link_token = NULL,
+        magic_link_expires = NULL,
+        last_login = NOW(),
+        updated_at = NOW()
       WHERE id = ${user.id}
     `
 
-    console.log("✅ Session created successfully")
+    // Create response and set session cookie
+    const response = NextResponse.redirect(new URL("/dashboard", request.url))
 
-    // Set secure session cookie
     const cookieStore = cookies()
     cookieStore.set("session", sessionToken, {
       httpOnly: true,
@@ -60,10 +55,11 @@ export async function GET(request: NextRequest) {
       path: "/",
     })
 
-    // Redirect to dashboard
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+    console.log(`✅ User ${user.email} logged in successfully`)
+
+    return response
   } catch (error) {
-    console.error("❌ Verification error:", error)
+    console.error("❌ Verify magic link error:", error)
     return NextResponse.redirect(new URL("/?error=verification-failed", request.url))
   }
 }
