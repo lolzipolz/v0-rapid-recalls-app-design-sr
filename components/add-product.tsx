@@ -8,8 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { X, Upload, Scan, Plus, Loader2, Package, Receipt, Barcode } from "lucide-react"
+import { X, Package, AlertCircle, CheckCircle } from "lucide-react"
 
 interface AddProductProps {
   onClose: () => void
@@ -17,12 +16,7 @@ interface AddProductProps {
 }
 
 export default function AddProduct({ onClose, onProductAdded }: AddProductProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [message, setMessage] = useState("")
-  const [activeTab, setActiveTab] = useState("manual")
-
-  // Manual form state
-  const [manualForm, setManualForm] = useState({
+  const [formData, setFormData] = useState({
     name: "",
     brand: "",
     model: "",
@@ -30,15 +24,15 @@ export default function AddProduct({ onClose, onProductAdded }: AddProductProps)
     purchase_date: "",
     purchase_price: "",
   })
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
-  // Receipt upload state
-  const [receiptFile, setReceiptFile] = useState<File | null>(null)
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
-
-  const handleManualSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setMessage("")
+    setError("")
+    setSuccess("")
 
     try {
       const response = await fetch("/api/products", {
@@ -46,129 +40,48 @@ export default function AddProduct({ onClose, onProductAdded }: AddProductProps)
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
-          ...manualForm,
-          source: "manual",
-          purchase_price: manualForm.purchase_price ? Number.parseFloat(manualForm.purchase_price) : null,
-          purchase_date: manualForm.purchase_date || null,
+          ...formData,
+          purchase_price: formData.purchase_price ? Number.parseFloat(formData.purchase_price) : null,
         }),
-        credentials: "include",
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setMessage("Product added successfully!")
+        setSuccess("Product added successfully!")
         setTimeout(() => {
           onProductAdded()
         }, 1000)
       } else {
-        setMessage(data.error || "Failed to add product")
+        setError(data.error || "Failed to add product")
       }
-    } catch (error) {
-      setMessage("Network error. Please try again.")
+    } catch (err) {
+      setError("Network error. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleReceiptUpload = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!receiptFile) {
-      setMessage("Please select a receipt image")
-      return
-    }
-
-    setIsLoading(true)
-    setMessage("")
-
-    try {
-      const formData = new FormData()
-      formData.append("receipt", receiptFile)
-
-      const response = await fetch("/api/products/upload-receipt", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setMessage(`Successfully extracted ${data.products?.length || 0} products from receipt!`)
-        setTimeout(() => {
-          onProductAdded()
-        }, 2000)
-      } else {
-        setMessage(data.error || "Failed to process receipt")
-      }
-    } catch (error) {
-      setMessage("Network error. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setReceiptFile(file)
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setReceiptPreview(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handleUPCSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const formData = new FormData(e.target as HTMLFormElement)
-    const upc = formData.get("upc") as string
-
-    if (!upc) {
-      setMessage("Please enter a UPC code")
-      return
-    }
-
-    setIsLoading(true)
-    setMessage("")
-
-    try {
-      const response = await fetch("/api/products/lookup-upc", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ upc }),
-        credentials: "include",
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setMessage("Product added successfully!")
-        setTimeout(() => {
-          onProductAdded()
-        }, 1000)
-      } else {
-        setMessage(data.error || "Failed to lookup UPC")
-      }
-    } catch (error) {
-      setMessage("Network error. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    })
   }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Add Product</CardTitle>
-              <CardDescription>Add products to monitor for recalls</CardDescription>
+              <CardTitle className="flex items-center space-x-2">
+                <Package className="h-5 w-5" />
+                <span>Add Product</span>
+              </CardTitle>
+              <CardDescription>Add a product to monitor for recalls</CardDescription>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -176,194 +89,107 @@ export default function AddProduct({ onClose, onProductAdded }: AddProductProps)
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="manual">
-                <Plus className="h-4 w-4 mr-2" />
-                Manual
-              </TabsTrigger>
-              <TabsTrigger value="receipt">
-                <Receipt className="h-4 w-4 mr-2" />
-                Receipt
-              </TabsTrigger>
-              <TabsTrigger value="upc">
-                <Barcode className="h-4 w-4 mr-2" />
-                UPC Scan
-              </TabsTrigger>
-            </TabsList>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="name">Product Name *</Label>
+              <Input
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="e.g., iPhone 15 Pro"
+                required
+                disabled={isLoading}
+              />
+            </div>
 
-            <TabsContent value="manual" className="space-y-4">
-              <form onSubmit={handleManualSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="name">Product Name *</Label>
-                    <Input
-                      id="name"
-                      value={manualForm.name}
-                      onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
-                      placeholder="e.g., iPhone 15 Pro"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="brand">Brand</Label>
-                    <Input
-                      id="brand"
-                      value={manualForm.brand}
-                      onChange={(e) => setManualForm({ ...manualForm, brand: e.target.value })}
-                      placeholder="e.g., Apple"
-                    />
-                  </div>
-                </div>
+            <div>
+              <Label htmlFor="brand">Brand</Label>
+              <Input
+                id="brand"
+                name="brand"
+                value={formData.brand}
+                onChange={handleChange}
+                placeholder="e.g., Apple"
+                disabled={isLoading}
+              />
+            </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="model">Model</Label>
-                    <Input
-                      id="model"
-                      value={manualForm.model}
-                      onChange={(e) => setManualForm({ ...manualForm, model: e.target.value })}
-                      placeholder="e.g., A3108"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="upc">UPC/Barcode</Label>
-                    <Input
-                      id="upc"
-                      value={manualForm.upc}
-                      onChange={(e) => setManualForm({ ...manualForm, upc: e.target.value })}
-                      placeholder="e.g., 123456789012"
-                    />
-                  </div>
-                </div>
+            <div>
+              <Label htmlFor="model">Model</Label>
+              <Input
+                id="model"
+                name="model"
+                value={formData.model}
+                onChange={handleChange}
+                placeholder="e.g., A2848"
+                disabled={isLoading}
+              />
+            </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="purchase_date">Purchase Date</Label>
-                    <Input
-                      id="purchase_date"
-                      type="date"
-                      value={manualForm.purchase_date}
-                      onChange={(e) => setManualForm({ ...manualForm, purchase_date: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="purchase_price">Purchase Price</Label>
-                    <Input
-                      id="purchase_price"
-                      type="number"
-                      step="0.01"
-                      value={manualForm.purchase_price}
-                      onChange={(e) => setManualForm({ ...manualForm, purchase_price: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
+            <div>
+              <Label htmlFor="upc">UPC/Barcode</Label>
+              <Input
+                id="upc"
+                name="upc"
+                value={formData.upc}
+                onChange={handleChange}
+                placeholder="e.g., 194252707234"
+                disabled={isLoading}
+              />
+            </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Adding Product...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Product
-                    </>
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
+            <div>
+              <Label htmlFor="purchase_date">Purchase Date</Label>
+              <Input
+                id="purchase_date"
+                name="purchase_date"
+                type="date"
+                value={formData.purchase_date}
+                onChange={handleChange}
+                disabled={isLoading}
+              />
+            </div>
 
-            <TabsContent value="receipt" className="space-y-4">
-              <div className="text-center">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">Upload Receipt</h3>
-                <p className="text-gray-600 mb-4">
-                  Upload a photo of your receipt and we'll extract the products automatically
-                </p>
-              </div>
+            <div>
+              <Label htmlFor="purchase_price">Purchase Price</Label>
+              <Input
+                id="purchase_price"
+                name="purchase_price"
+                type="number"
+                step="0.01"
+                value={formData.purchase_price}
+                onChange={handleChange}
+                placeholder="e.g., 999.99"
+                disabled={isLoading}
+              />
+            </div>
 
-              <form onSubmit={handleReceiptUpload} className="space-y-4">
-                <div>
-                  <Label htmlFor="receipt">Receipt Image</Label>
-                  <Input id="receipt" type="file" accept="image/*" onChange={handleFileChange} required />
-                </div>
-
-                {receiptPreview && (
-                  <div className="mt-4">
-                    <img
-                      src={receiptPreview || "/placeholder.svg"}
-                      alt="Receipt preview"
-                      className="max-w-full h-48 object-contain mx-auto border rounded"
-                    />
-                  </div>
-                )}
-
-                <Button type="submit" className="w-full" disabled={isLoading || !receiptFile}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing Receipt...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Process Receipt
-                    </>
-                  )}
-                </Button>
-              </form>
-
-              <Alert>
-                <AlertDescription>
-                  <strong>Tip:</strong> Make sure the receipt is clear and well-lit for best results.
-                </AlertDescription>
+            {/* Success Message */}
+            {success && (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">{success}</AlertDescription>
               </Alert>
-            </TabsContent>
+            )}
 
-            <TabsContent value="upc" className="space-y-4">
-              <div className="text-center">
-                <Barcode className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">UPC Lookup</h3>
-                <p className="text-gray-600 mb-4">Enter or scan a UPC barcode to automatically add product details</p>
-              </div>
-
-              <form onSubmit={handleUPCSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="upc">UPC Code</Label>
-                  <Input name="upc" placeholder="Enter UPC barcode (e.g., 123456789012)" required />
-                </div>
-
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Looking up Product...
-                    </>
-                  ) : (
-                    <>
-                      <Scan className="mr-2 h-4 w-4" />
-                      Lookup Product
-                    </>
-                  )}
-                </Button>
-              </form>
-
-              <Alert>
-                <AlertDescription>
-                  <strong>Coming Soon:</strong> Camera barcode scanning will be available in the next update.
-                </AlertDescription>
+            {/* Error Message */}
+            {error && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">{error}</AlertDescription>
               </Alert>
-            </TabsContent>
-          </Tabs>
+            )}
 
-          {message && (
-            <Alert className="mt-4">
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
+            <div className="flex space-x-3 pt-4">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} className="flex-1">
+                {isLoading ? "Adding..." : "Add Product"}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

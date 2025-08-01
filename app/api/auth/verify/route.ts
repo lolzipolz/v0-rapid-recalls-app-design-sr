@@ -1,33 +1,38 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql, initializeDatabase } from "@/lib/database"
+import { sql } from "@/lib/database"
 
 export async function GET(request: NextRequest) {
   try {
-    await initializeDatabase()
+    console.log("🔄 Processing magic link verification...")
 
     const { searchParams } = new URL(request.url)
     const token = searchParams.get("token")
 
     if (!token) {
-      return NextResponse.redirect(new URL("/?error=invalid-token", request.url))
+      console.log("❌ No token provided")
+      return NextResponse.redirect(new URL("/?error=invalid-link", request.url))
     }
+
+    console.log(`🔍 Verifying token: ${token.substring(0, 8)}...`)
 
     // Find user with valid magic link token
     const users = await sql`
-      SELECT * FROM users 
+      SELECT id, email FROM users 
       WHERE magic_link_token = ${token} 
       AND magic_link_expires > NOW()
     `
 
     if (users.length === 0) {
-      return NextResponse.redirect(new URL("/?error=expired-token", request.url))
+      console.log("❌ Invalid or expired token")
+      return NextResponse.redirect(new URL("/?error=expired-link", request.url))
     }
 
     const user = users[0]
+    console.log(`👤 User found: ${user.email}`)
 
     // Generate session token
     const sessionToken = crypto.randomUUID()
-    const sessionExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
     // Update user with session and clear magic link
     await sql`
@@ -42,6 +47,8 @@ export async function GET(request: NextRequest) {
       WHERE id = ${user.id}
     `
 
+    console.log("✅ Session created successfully")
+
     // Create response and set session cookie
     const response = NextResponse.redirect(new URL("/dashboard", request.url))
 
@@ -49,13 +56,15 @@ export async function GET(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      expires: sessionExpires,
+      maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
       path: "/",
     })
 
+    console.log(`✅ User ${user.email} logged in successfully with session cookie`)
+
     return response
   } catch (error) {
-    console.error("Magic link verification error:", error)
+    console.error("❌ Verify magic link error:", error)
     return NextResponse.redirect(new URL("/?error=verification-failed", request.url))
   }
 }

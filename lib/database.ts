@@ -25,7 +25,8 @@ export async function getCurrentUser(sessionToken: string) {
 
   try {
     const users = await sql`
-      SELECT * FROM users 
+      SELECT id, email, notification_preferences, created_at, last_login, session_expires
+      FROM users 
       WHERE session_token = ${sessionToken} 
       AND session_expires > NOW()
     `
