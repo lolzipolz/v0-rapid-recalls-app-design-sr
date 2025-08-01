@@ -8,7 +8,8 @@
     "dev": "next dev",
     "lint": "next lint",
     "migrate": "node scripts/run-migrations.js",
-    "start": "next start"
+    "start": "next start",
+    "test:cron": "node scripts/test-cron.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "latest",

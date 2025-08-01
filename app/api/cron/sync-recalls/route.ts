@@ -6,20 +6,29 @@ import { sql } from "@/lib/database"
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify this is a legitimate Vercel cron job
+    // For Vercel cron jobs, we need to use a different approach
+    // Vercel cron jobs don't send special headers, so we'll use a combination of:
+    // 1. Check if it's a Vercel cron job (no special headers, but we can detect by user agent)
+    // 2. Allow manual testing with secret parameter
+    // 3. Allow custom authorization header for external cron services
+    
     const authHeader = request.headers.get("authorization")
-    const vercelCronHeader = request.headers.get("x-vercel-cron")
+    const userAgent = request.headers.get("user-agent") || ""
+    const { searchParams } = new URL(request.url)
+    const secretParam = searchParams.get("secret")
     
-    // Allow either Vercel's built-in cron header OR our custom secret
-    const isVercelCron = vercelCronHeader === "1"
+    // Check if this is a legitimate request
+    const isVercelCron = userAgent.includes("Vercel") || userAgent.includes("vercel")
     const isCustomAuth = authHeader === `Bearer ${process.env.CRON_SECRET}`
+    const isSecretParam = secretParam === process.env.CRON_SECRET
     
-    if (!isVercelCron && !isCustomAuth) {
+    if (!isVercelCron && !isCustomAuth && !isSecretParam) {
       console.log("❌ Unauthorized cron request:", {
-        hasVercelCron: !!vercelCronHeader,
+        userAgent,
         hasCustomAuth: !!authHeader,
-        vercelCronValue: vercelCronHeader,
-        authValue: authHeader?.substring(0, 20) + "..."
+        hasSecretParam: !!secretParam,
+        authValue: authHeader?.substring(0, 20) + "...",
+        secretValue: secretParam?.substring(0, 10) + "..."
       })
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
