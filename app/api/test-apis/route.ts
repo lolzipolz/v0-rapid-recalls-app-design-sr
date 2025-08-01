@@ -1,131 +1,39 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 
-// Force dynamic rendering
-export const dynamic = "force-dynamic"
+export async function GET(request: NextRequest) {
+  // Log all headers to see what Vercel sends
+  const headers: Record<string, string> = {}
+  request.headers.forEach((value, key) => {
+    headers[key] = value
+  })
 
-export async function GET() {
-  const results = {
+  return NextResponse.json({
+    message: "API test endpoint",
     timestamp: new Date().toISOString(),
-    apis: {} as Record<string, any>,
-  }
+    headers,
+    userAgent: request.headers.get("user-agent"),
+    hasVercelCron: request.headers.get("x-vercel-cron") === "1",
+    hasAuthorization: !!request.headers.get("authorization"),
+  })
+}
 
-  // Test FDA API
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    const fdaResponse = await fetch("https://api.fda.gov/food/enforcement.json?limit=1", {
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    results.apis.fda = {
-      status: fdaResponse.ok ? "✅ Working" : "❌ Error",
-      statusCode: fdaResponse.status,
-      url: "https://api.fda.gov/food/enforcement.json",
-    }
-  } catch (error) {
-    results.apis.fda = {
-      status: "❌ Timeout/Error",
-      error: error instanceof Error ? error.message : "Unknown error",
-      url: "https://api.fda.gov/food/enforcement.json",
-    }
-  }
-
-  // Test USDA API
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    const usdaResponse = await fetch("https://www.fsis.usda.gov/fsis/api/recall", {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "RapidRecalls/1.0 (contact@rapidrecalls.com)",
-      },
-    })
-    clearTimeout(timeoutId)
-
-    results.apis.usda = {
-      status: usdaResponse.ok ? "✅ Working" : "❌ Error",
-      statusCode: usdaResponse.status,
-      url: "https://www.fsis.usda.gov/fsis/api/recall",
-    }
-  } catch (error) {
-    results.apis.usda = {
-      status: "❌ Timeout/Error",
-      error: error instanceof Error ? error.message : "Unknown error",
-      url: "https://www.fsis.usda.gov/fsis/api/recall",
-    }
-  }
-
-  // Test NHTSA API
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    const nhtsaResponse = await fetch("https://api.nhtsa.gov/recalls/recallsByVehicle?modelYear=2024", {
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    results.apis.nhtsa = {
-      status: nhtsaResponse.ok ? "✅ Working" : "❌ Error",
-      statusCode: nhtsaResponse.status,
-      url: "https://api.nhtsa.gov/recalls/recallsByVehicle",
-    }
-  } catch (error) {
-    results.apis.nhtsa = {
-      status: "❌ Timeout/Error",
-      error: error instanceof Error ? error.message : "Unknown error",
-      url: "https://api.nhtsa.gov/recalls/recallsByVehicle",
-    }
-  }
-
-  // Test CPSC RSS
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    const cpscResponse = await fetch("https://www.cpsc.gov/Newsroom/News-Releases/RSS", {
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    results.apis.cpsc = {
-      status: cpscResponse.ok ? "✅ Working" : "❌ Error",
-      statusCode: cpscResponse.status,
-      url: "https://www.cpsc.gov/Newsroom/News-Releases/RSS",
-    }
-  } catch (error) {
-    results.apis.cpsc = {
-      status: "❌ Timeout/Error",
-      error: error instanceof Error ? error.message : "Unknown error",
-      url: "https://www.cpsc.gov/Newsroom/News-Releases/RSS",
-    }
-  }
-
-  // Test OpenFoodFacts (UPC lookup)
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    const offResponse = await fetch("https://world.openfoodfacts.org/api/v0/product/737628064502.json", {
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    results.apis.openfoodfacts = {
-      status: offResponse.ok ? "✅ Working" : "❌ Error",
-      statusCode: offResponse.status,
-      url: "https://world.openfoodfacts.org/api/v0/product/",
-    }
-  } catch (error) {
-    results.apis.openfoodfacts = {
-      status: "❌ Timeout/Error",
-      error: error instanceof Error ? error.message : "Unknown error",
-      url: "https://world.openfoodfacts.org/api/v0/product/",
-    }
-  }
-
-  return NextResponse.json(results)
+export async function POST(request: NextRequest) {
+  // Test the cron endpoint logic
+  const authHeader = request.headers.get("authorization")
+  const vercelCronHeader = request.headers.get("x-vercel-cron")
+  
+  const isVercelCron = vercelCronHeader === "1"
+  const isCustomAuth = authHeader === `Bearer ${process.env.CRON_SECRET}`
+  
+  return NextResponse.json({
+    message: "Cron test endpoint",
+    timestamp: new Date().toISOString(),
+    isVercelCron,
+    isCustomAuth,
+    hasVercelCronHeader: !!vercelCronHeader,
+    hasCustomAuthHeader: !!authHeader,
+    vercelCronValue: vercelCronHeader,
+    authValue: authHeader?.substring(0, 20) + "...",
+    authorized: isVercelCron || isCustomAuth,
+  })
 }

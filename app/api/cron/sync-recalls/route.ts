@@ -6,9 +6,21 @@ import { sql } from "@/lib/database"
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify cron secret for security
+    // Verify this is a legitimate Vercel cron job
     const authHeader = request.headers.get("authorization")
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    const vercelCronHeader = request.headers.get("x-vercel-cron")
+    
+    // Allow either Vercel's built-in cron header OR our custom secret
+    const isVercelCron = vercelCronHeader === "1"
+    const isCustomAuth = authHeader === `Bearer ${process.env.CRON_SECRET}`
+    
+    if (!isVercelCron && !isCustomAuth) {
+      console.log("❌ Unauthorized cron request:", {
+        hasVercelCron: !!vercelCronHeader,
+        hasCustomAuth: !!authHeader,
+        vercelCronValue: vercelCronHeader,
+        authValue: authHeader?.substring(0, 20) + "..."
+      })
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
