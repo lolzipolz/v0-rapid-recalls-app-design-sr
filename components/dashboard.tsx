@@ -4,59 +4,28 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Shield, Plus, LogOut, Bell, Package, AlertTriangle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Shield, Plus, Package, Bell, AlertTriangle, CheckCircle, LogOut, Loader2, User } from "lucide-react"
 import AddProduct from "@/components/add-product"
-import RecallAlertCard from "@/components/recall-alert-card"
-
-interface User {
-  id: string
-  email: string
-  notification_preferences: any
-  created_at: string
-  last_login: string
-}
-
-interface Product {
-  id: string
-  name: string
-  brand: string
-  model: string
-  upc: string
-  purchase_date: string
-  purchase_price: number
-  source: string
-}
-
-interface Recall {
-  id: string
-  title: string
-  description: string
-  agency: string
-  severity: string
-  recall_date: string
-  link: string
-}
-
-interface MatchedRecall {
-  id: string
-  product: Product
-  recall: Recall
-  match_type: string
-  confidence_score: number
-  acknowledged_at: string | null
-  resolved_at: string | null
-  created_at: string
-}
+import { useRouter } from "next/navigation"
 
 interface DashboardProps {
-  user: User
+  user: {
+    id: string
+    email: string
+    notification_preferences: any
+    created_at: string
+    last_login: string
+  }
 }
 
-export default function Dashboard({ user }: DashboardProps) {
-  const [products, setProducts] = useState<Product[]>([])
-  const [matchedRecalls, setMatchedRecalls] = useState<MatchedRecall[]>([])
+export function Dashboard({ user }: DashboardProps) {
+  const [products, setProducts] = useState([])
+  const [recalls, setRecalls] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [showAddProduct, setShowAddProduct] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const router = useRouter()
 
   useEffect(() => {
     loadData()
@@ -64,27 +33,32 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const loadData = async () => {
     try {
+      setIsLoading(true)
+
       // Load products
       const productsResponse = await fetch("/api/products", {
         credentials: "include",
       })
+
       if (productsResponse.ok) {
         const productsData = await productsResponse.json()
         setProducts(productsData.products || [])
       }
 
-      // Load matched recalls
+      // Load recalls
       const recallsResponse = await fetch("/api/recalls", {
         credentials: "include",
       })
+
       if (recallsResponse.ok) {
         const recallsData = await recallsResponse.json()
-        setMatchedRecalls(recallsData.matched_recalls || [])
+        setRecalls(recallsData.recalls || [])
       }
     } catch (error) {
       console.error("Failed to load data:", error)
+      setError("Failed to load dashboard data")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
@@ -94,24 +68,24 @@ export default function Dashboard({ user }: DashboardProps) {
         method: "POST",
         credentials: "include",
       })
-      window.location.href = "/"
+      router.push("/")
     } catch (error) {
       console.error("Logout failed:", error)
     }
   }
 
   const handleProductAdded = () => {
-    setShowAddProduct(false)
     loadData()
+    setShowAddProduct(false)
   }
 
-  const activeRecalls = matchedRecalls.filter((mr) => !mr.resolved_at)
-  const resolvedRecalls = matchedRecalls.filter((mr) => mr.resolved_at)
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
       </div>
     )
   }
@@ -121,13 +95,22 @@ export default function Dashboard({ user }: DashboardProps) {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
-              <Shield className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">RapidRecalls</h1>
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-xl">
+                <Shield className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">RapidRecalls</h1>
+                <p className="text-sm text-gray-500">Dashboard</p>
+              </div>
             </div>
+
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <User className="h-4 w-4" />
+                <span>{user.email}</span>
+              </div>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
@@ -137,142 +120,145 @@ export default function Dashboard({ user }: DashboardProps) {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">{error}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
-              <div className="flex items-center">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Products Tracked</p>
+                  <p className="text-3xl font-bold text-gray-900">{products.length}</p>
+                </div>
                 <Package className="h-8 w-8 text-blue-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Products</p>
-                  <p className="text-2xl font-bold text-gray-900">{products.length}</p>
-                </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="p-6">
-              <div className="flex items-center">
-                <AlertTriangle className="h-8 w-8 text-red-600" />
-                <div className="ml-4">
+              <div className="flex items-center justify-between">
+                <div>
                   <p className="text-sm font-medium text-gray-600">Active Recalls</p>
-                  <p className="text-2xl font-bold text-gray-900">{activeRecalls.length}</p>
+                  <p className="text-3xl font-bold text-red-600">{recalls.length}</p>
                 </div>
+                <AlertTriangle className="h-8 w-8 text-red-600" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="p-6">
-              <div className="flex items-center">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Monitoring Status</p>
+                  <p className="text-lg font-semibold text-green-600 flex items-center">
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Active
+                  </p>
+                </div>
                 <Bell className="h-8 w-8 text-green-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Resolved</p>
-                  <p className="text-2xl font-bold text-gray-900">{resolvedRecalls.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <Shield className="h-8 w-8 text-blue-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Safety Score</p>
-                  <p className="text-2xl font-bold text-gray-900">{activeRecalls.length === 0 ? "100%" : "85%"}</p>
-                </div>
               </div>
             </CardContent>
           </Card>
         </div>
-
-        {/* Active Recalls */}
-        {activeRecalls.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-              <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
-              Active Recall Alerts
-            </h2>
-            <div className="space-y-4">
-              {activeRecalls.map((matchedRecall) => (
-                <RecallAlertCard key={matchedRecall.id} matchedRecall={matchedRecall} onUpdate={loadData} />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Products Section */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Your Products</h2>
-            <Button onClick={() => setShowAddProduct(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Product
-            </Button>
-          </div>
-
-          {products.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No products yet</h3>
-                <p className="text-gray-600 mb-4">Add your products to start receiving recall alerts</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Your Products</CardTitle>
+                  <CardDescription>Products being monitored for recalls</CardDescription>
+                </div>
                 <Button onClick={() => setShowAddProduct(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Your First Product
+                  Add Product
                 </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((product) => (
-                <Card key={product.id}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{product.name}</CardTitle>
-                    <CardDescription>
-                      {product.brand} {product.model && `- ${product.model}`}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {product.upc && <p className="text-sm text-gray-600">UPC: {product.upc}</p>}
-                      {product.purchase_date && (
-                        <p className="text-sm text-gray-600">
-                          Purchased: {new Date(product.purchase_date).toLocaleDateString()}
-                        </p>
-                      )}
-                      {product.purchase_price && (
-                        <p className="text-sm text-gray-600">Price: ${product.purchase_price}</p>
-                      )}
-                      <Badge variant="secondary" className="text-xs">
-                        {product.source}
-                      </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {products.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No products yet</h3>
+                  <p className="text-gray-600 mb-4">Add your first product to start monitoring for recalls</p>
+                  <Button onClick={() => setShowAddProduct(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Your First Product
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {products.map((product: any) => (
+                    <div key={product.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{product.name}</h4>
+                          {product.brand && <p className="text-sm text-gray-600">Brand: {product.brand}</p>}
+                          {product.model && <p className="text-sm text-gray-600">Model: {product.model}</p>}
+                          <p className="text-xs text-gray-500 mt-2">
+                            Added {new Date(product.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Badge variant="secondary">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Monitoring
+                        </Badge>
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Resolved Recalls */}
-        {resolvedRecalls.length > 0 && (
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-              <Bell className="h-5 w-5 text-green-600 mr-2" />
-              Resolved Recalls
-            </h2>
-            <div className="space-y-4">
-              {resolvedRecalls.map((matchedRecall) => (
-                <RecallAlertCard key={matchedRecall.id} matchedRecall={matchedRecall} onUpdate={loadData} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          {/* Recalls Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Recalls</CardTitle>
+              <CardDescription>Latest product recalls that might affect you</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recalls.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No active recalls</h3>
+                  <p className="text-gray-600">Great news! None of your products have active recalls.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recalls.map((recall: any) => (
+                    <div key={recall.id} className="border border-red-200 rounded-lg p-4 bg-red-50">
+                      <div className="flex items-start space-x-3">
+                        <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-red-900">{recall.title}</h4>
+                          <p className="text-sm text-red-700 mt-1">{recall.description}</p>
+                          <div className="flex items-center justify-between mt-3">
+                            <Badge variant="destructive">{recall.agency}</Badge>
+                            <span className="text-xs text-red-600">
+                              {new Date(recall.recall_date).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
 
       {/* Add Product Modal */}
       {showAddProduct && <AddProduct onClose={() => setShowAddProduct(false)} onProductAdded={handleProductAdded} />}
