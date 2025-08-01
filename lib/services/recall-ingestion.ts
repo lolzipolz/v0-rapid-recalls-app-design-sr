@@ -306,23 +306,22 @@ export class RecallIngestionService {
     try {
       await sql`
         INSERT INTO recalls (
-          agency, recall_number, title, description, recall_date, 
-          link, severity, product_keywords, upcs, brands, raw_data
+          agency, external_id, title, description, recall_date, 
+          link, severity, product_keywords, brand_keywords, upc_codes
         ) VALUES (
           ${recallData.agency}, ${recallData.recall_number}, ${recallData.title},
           ${recallData.description}, ${recallData.recall_date}, ${recallData.link},
-          ${recallData.severity}, ${recallData.product_keywords}, ${recallData.upcs},
-          ${recallData.brands}, ${JSON.stringify(recallData.raw_data)}
+          ${recallData.severity}, ${recallData.product_keywords}, ${recallData.brands},
+          ${recallData.upcs}
         )
-        ON CONFLICT (recall_number) 
+        ON CONFLICT (external_id) 
         DO UPDATE SET
           title = EXCLUDED.title,
           description = EXCLUDED.description,
           severity = EXCLUDED.severity,
           product_keywords = EXCLUDED.product_keywords,
-          upcs = EXCLUDED.upcs,
-          brands = EXCLUDED.brands,
-          raw_data = EXCLUDED.raw_data,
+          brand_keywords = EXCLUDED.brand_keywords,
+          upc_codes = EXCLUDED.upc_codes,
           updated_at = NOW()
       `
     } catch (error) {

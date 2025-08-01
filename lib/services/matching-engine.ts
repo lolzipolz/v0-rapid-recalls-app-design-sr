@@ -61,9 +61,9 @@ export class MatchingEngine {
 
   private async calculateMatch(product: Product, recall: Recall): Promise<MatchResult | null> {
     // 1. Exact UPC match (100% confidence)
-    if (product.upc && recall.upcs.length > 0) {
+    if (product.upc && recall.upc_codes.length > 0) {
       const normalizedProductUPC = this.normalizeUPC(product.upc)
-      const hasUPCMatch = recall.upcs.some((recallUPC) => {
+      const hasUPCMatch = recall.upc_codes.some((recallUPC) => {
         const normalizedRecallUPC = this.normalizeUPC(recallUPC)
         return normalizedProductUPC === normalizedRecallUPC
       })
@@ -78,8 +78,8 @@ export class MatchingEngine {
     }
 
     // 2. Brand + Title fuzzy match
-    if (product.brand && recall.brands.length > 0) {
-      const brandMatch = recall.brands.some(
+    if (product.brand && recall.brand_keywords.length > 0) {
+      const brandMatch = recall.brand_keywords.some(
         (recallBrand) => this.fuzzyMatch(product.brand!.toLowerCase(), recallBrand.toLowerCase()) > 0.8,
       )
 

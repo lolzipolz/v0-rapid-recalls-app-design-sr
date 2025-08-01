@@ -9,7 +9,11 @@
     "lint": "next lint",
     "migrate": "node scripts/run-migrations.js",
     "start": "next start",
-    "test:cron": "node scripts/test-cron.js"
+    "test:cron": "node scripts/test-cron.js",
+    "test:recalls": "node scripts/test-recall-apis.js",
+    "db:setup": "node scripts/setup-database.js",
+    "db:inspect": "node scripts/inspect-database.js",
+    "db:apply-schema": "node scripts/apply-schema.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "latest",
