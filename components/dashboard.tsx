@@ -64,15 +64,19 @@ export function Dashboard({ user }: DashboardProps) {
     try {
       setIsLoading(true)
 
-      // Load products
-      const productsResponse = await fetch(`/api/products?userId=${user.id}`)
+      // Load products - include credentials for authenticated requests
+      const productsResponse = await fetch(`/api/products?userId=${user.id}`, {
+        credentials: "include",
+      })
       if (productsResponse.ok) {
         const productsData = await productsResponse.json()
         setProducts(productsData.products || [])
       }
 
-      // Load recalls
-      const recallsResponse = await fetch(`/api/recalls?userId=${user.id}`)
+      // Load recalls - include credentials for authenticated requests
+      const recallsResponse = await fetch(`/api/recalls?userId=${user.id}`, {
+        credentials: "include",
+      })
       if (recallsResponse.ok) {
         const recallsData = await recallsResponse.json()
         setRecalls(recallsData.recalls || [])
@@ -87,7 +91,10 @@ export function Dashboard({ user }: DashboardProps) {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" })
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include", // Include credentials for logout
+      })
       router.push("/")
     } catch (error) {
       console.error("Logout failed:", error)

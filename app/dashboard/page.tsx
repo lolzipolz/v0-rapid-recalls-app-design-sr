@@ -25,7 +25,9 @@ export default function DashboardPage() {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch("/api/auth/me")
+      const response = await fetch("/api/auth/me", {
+        credentials: "include", // This ensures cookies are sent with the request
+      })
       const data = await response.json()
 
       if (data.user) {

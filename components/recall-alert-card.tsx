@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, ExternalLink, Check, X, Calendar, Package } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertTriangle, ExternalLink, Check, X, Calendar, Building } from "lucide-react"
 
 interface Recall {
   id: string
@@ -24,53 +25,68 @@ interface Recall {
 
 interface RecallAlertCardProps {
   recall: Recall
+  onUpdate?: () => void
 }
 
-export function RecallAlertCard({ recall }: RecallAlertCardProps) {
+export function RecallAlertCard({ recall, onUpdate }: RecallAlertCardProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [localRecall, setLocalRecall] = useState(recall)
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case "high":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "destructive"
       case "medium":
-        return "bg-orange-100 text-orange-800 border-orange-200"
+        return "secondary"
       case "low":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "outline"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "outline"
     }
   }
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case "high":
-        return <AlertTriangle className="w-4 h-4 text-red-600" />
+        return "🔴"
       case "medium":
-        return <AlertTriangle className="w-4 h-4 text-orange-600" />
+        return "🟡"
       case "low":
-        return <AlertTriangle className="w-4 h-4 text-yellow-600" />
+        return "🟢"
       default:
-        return <AlertTriangle className="w-4 h-4 text-gray-600" />
+        return "⚪"
     }
   }
 
   const handleAcknowledge = async () => {
     setIsLoading(true)
+    setMessage(null)
+
     try {
-      const response = await fetch(`/api/recalls/${localRecall.id}/acknowledge`, {
+      const response = await fetch(`/api/recalls/${recall.id}/acknowledge`, {
         method: "POST",
+        credentials: "include",
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        setLocalRecall((prev) => ({
-          ...prev,
-          acknowledged_at: new Date().toISOString(),
-        }))
+        setMessage({
+          type: "success",
+          text: "Recall acknowledged successfully.",
+        })
+        onUpdate?.()
+      } else {
+        setMessage({
+          type: "error",
+          text: data.error || "Failed to acknowledge recall.",
+        })
       }
     } catch (error) {
-      console.error("Failed to acknowledge recall:", error)
+      setMessage({
+        type: "error",
+        text: "Network error. Please try again.",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -78,133 +94,139 @@ export function RecallAlertCard({ recall }: RecallAlertCardProps) {
 
   const handleResolve = async () => {
     setIsLoading(true)
+    setMessage(null)
+
     try {
-      const response = await fetch(`/api/recalls/${localRecall.id}/resolve`, {
+      const response = await fetch(`/api/recalls/${recall.id}/resolve`, {
         method: "POST",
+        credentials: "include",
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        setLocalRecall((prev) => ({
-          ...prev,
-          resolved_at: new Date().toISOString(),
-        }))
+        setMessage({
+          type: "success",
+          text: "Recall marked as resolved.",
+        })
+        onUpdate?.()
+      } else {
+        setMessage({
+          type: "error",
+          text: data.error || "Failed to resolve recall.",
+        })
       }
     } catch (error) {
-      console.error("Failed to resolve recall:", error)
+      setMessage({
+        type: "error",
+        text: "Network error. Please try again.",
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-  }
-
-  const getConfidenceColor = (score: number) => {
-    if (score >= 0.8) return "text-green-600"
-    if (score >= 0.6) return "text-orange-600"
-    return "text-red-600"
-  }
-
   return (
     <Card
       className={`border-l-4 ${
-        localRecall.severity === "high"
-          ? "border-l-red-500"
-          : localRecall.severity === "medium"
-            ? "border-l-orange-500"
-            : "border-l-yellow-500"
-      } ${localRecall.resolved_at ? "opacity-60" : ""}`}
+        recall.severity === "high"
+          ? "border-l-red-500 bg-red-50"
+          : recall.severity === "medium"
+            ? "border-l-orange-500 bg-orange-50"
+            : "border-l-yellow-500 bg-yellow-50"
+      }`}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              {getSeverityIcon(localRecall.severity)}
-              <Badge className={getSeverityColor(localRecall.severity)}>
-                {localRecall.severity.toUpperCase()} PRIORITY
-              </Badge>
+              <span className="text-lg">{getSeverityIcon(recall.severity)}</span>
+              <Badge variant={getSeverityColor(recall.severity) as any}>{recall.severity.toUpperCase()} PRIORITY</Badge>
               <Badge variant="outline" className="text-xs">
-                {localRecall.agency}
+                {Math.round(recall.confidence_score * 100)}% match
               </Badge>
             </div>
-            <CardTitle className="text-lg leading-tight">{localRecall.recall_title}</CardTitle>
-            <CardDescription className="flex items-center gap-4 mt-2">
-              <span className="flex items-center gap-1">
-                <Package className="w-3 h-3" />
-                {localRecall.product_name}
-                {localRecall.product_brand && ` (${localRecall.product_brand})`}
-              </span>
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {formatDate(localRecall.recall_date)}
-              </span>
+            <CardTitle className="text-lg leading-tight">{recall.recall_title}</CardTitle>
+            <CardDescription className="mt-1">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="flex items-center gap-1">
+                  <Building className="w-3 h-3" />
+                  {recall.agency}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {new Date(recall.recall_date).toLocaleDateString()}
+                </span>
+              </div>
             </CardDescription>
           </div>
-
-          <div className="flex items-center gap-2 ml-4">
-            <div className="text-right">
-              <div className="text-xs text-gray-500">Match Confidence</div>
-              <div className={`text-sm font-medium ${getConfidenceColor(localRecall.confidence_score)}`}>
-                {Math.round(localRecall.confidence_score * 100)}%
-              </div>
-            </div>
-          </div>
+          <AlertTriangle
+            className={`w-6 h-6 ${
+              recall.severity === "high"
+                ? "text-red-500"
+                : recall.severity === "medium"
+                  ? "text-orange-500"
+                  : "text-yellow-500"
+            }`}
+          />
         </div>
       </CardHeader>
 
-      <CardContent className="pt-0">
-        <div className="space-y-4">
-          {/* Description */}
-          <div>
-            <p className="text-sm text-gray-700 leading-relaxed">{localRecall.description}</p>
-          </div>
+      <CardContent className="space-y-4">
+        <div>
+          <h4 className="font-medium text-gray-900 mb-1">Affected Product:</h4>
+          <p className="text-gray-700">
+            {recall.product_brand && `${recall.product_brand} `}
+            {recall.product_name}
+          </p>
+        </div>
 
-          {/* Status Indicators */}
-          {(localRecall.acknowledged_at || localRecall.resolved_at) && (
-            <div className="flex items-center gap-4 text-sm">
-              {localRecall.acknowledged_at && (
-                <div className="flex items-center gap-1 text-blue-600">
-                  <Check className="w-3 h-3" />
-                  Acknowledged {formatDate(localRecall.acknowledged_at)}
-                </div>
-              )}
-              {localRecall.resolved_at && (
-                <div className="flex items-center gap-1 text-green-600">
-                  <Check className="w-3 h-3" />
-                  Resolved {formatDate(localRecall.resolved_at)}
-                </div>
-              )}
-            </div>
+        <div>
+          <h4 className="font-medium text-gray-900 mb-1">Description:</h4>
+          <p className="text-gray-700 text-sm leading-relaxed">{recall.description}</p>
+        </div>
+
+        {message && (
+          <Alert
+            className={`${message.type === "error" ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}
+          >
+            <AlertDescription className={message.type === "error" ? "text-red-700" : "text-green-700"}>
+              {message.text}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={() => window.open(recall.link, "_blank")}>
+            <ExternalLink className="w-4 h-4 mr-1" />
+            View Details
+          </Button>
+
+          {!recall.acknowledged_at && (
+            <Button variant="secondary" size="sm" onClick={handleAcknowledge} disabled={isLoading}>
+              <Check className="w-4 h-4 mr-1" />
+              Acknowledge
+            </Button>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              {!localRecall.acknowledged_at && (
-                <Button variant="outline" size="sm" onClick={handleAcknowledge} disabled={isLoading}>
-                  <Check className="w-3 h-3 mr-1" />
-                  Acknowledge
-                </Button>
-              )}
-
-              {!localRecall.resolved_at && (
-                <Button variant="outline" size="sm" onClick={handleResolve} disabled={isLoading}>
-                  <X className="w-3 h-3 mr-1" />
-                  Mark Resolved
-                </Button>
-              )}
-            </div>
-
-            <Button variant="ghost" size="sm" onClick={() => window.open(localRecall.link, "_blank")}>
-              <ExternalLink className="w-3 h-3 mr-1" />
-              View Details
+          {!recall.resolved_at && (
+            <Button variant="default" size="sm" onClick={handleResolve} disabled={isLoading}>
+              <X className="w-4 h-4 mr-1" />
+              Mark Resolved
             </Button>
-          </div>
+          )}
+
+          {recall.acknowledged_at && (
+            <Badge variant="secondary" className="text-xs">
+              Acknowledged {new Date(recall.acknowledged_at).toLocaleDateString()}
+            </Badge>
+          )}
+
+          {recall.resolved_at && (
+            <Badge variant="default" className="text-xs">
+              Resolved {new Date(recall.resolved_at).toLocaleDateString()}
+            </Badge>
+          )}
         </div>
       </CardContent>
     </Card>
