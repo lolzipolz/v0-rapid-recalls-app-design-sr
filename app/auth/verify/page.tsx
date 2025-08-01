@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Loader2, CheckCircle, XCircle } from "lucide-react"
 
 export default function VerifyPage() {
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading")
-  const [message, setMessage] = useState("")
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading")
+  const [message, setMessage] = useState("")
 
   useEffect(() => {
     const token = searchParams.get("token")
@@ -22,60 +21,46 @@ export default function VerifyPage() {
     }
 
     // The verification happens on the server via the GET route
-    // If we reach this page, it means there was an issue
-    const error = searchParams.get("error")
+    // This page is just for showing the loading state
+    // The actual redirect happens in the API route
 
-    if (error) {
+    const timer = setTimeout(() => {
       setStatus("error")
-      switch (error) {
-        case "invalid-token":
-          setMessage("Invalid or expired verification link")
-          break
-        case "verification-failed":
-          setMessage("Verification failed. Please try again.")
-          break
-        default:
-          setMessage("An error occurred during verification")
-      }
-    } else {
-      // This shouldn't happen if verification was successful
-      setStatus("error")
-      setMessage("Verification incomplete")
-    }
+      setMessage("Verification taking longer than expected")
+    }, 5000)
+
+    return () => clearTimeout(timer)
   }, [searchParams])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center space-x-2">
-            {status === "loading" && <Loader2 className="h-5 w-5 animate-spin text-blue-600" />}
-            {status === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
-            {status === "error" && <AlertCircle className="h-5 w-5 text-red-600" />}
-            <span>
-              {status === "loading" && "Verifying..."}
-              {status === "success" && "Verification Successful"}
-              {status === "error" && "Verification Failed"}
-            </span>
-          </CardTitle>
-          <CardDescription>
-            {status === "loading" && "Please wait while we verify your account"}
-            {status === "success" && "Redirecting you to your dashboard"}
-            {status === "error" && "There was a problem with your verification link"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {status === "error" && (
-            <Alert className="border-red-200 bg-red-50">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">{message}</AlertDescription>
-            </Alert>
+        <CardContent className="p-8 text-center">
+          {status === "loading" && (
+            <>
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+              <h1 className="text-xl font-semibold mb-2">Verifying your login...</h1>
+              <p className="text-gray-600">Please wait while we sign you in.</p>
+            </>
           )}
 
-          {status === "loading" && (
-            <div className="text-center py-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            </div>
+          {status === "success" && (
+            <>
+              <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" />
+              <h1 className="text-xl font-semibold mb-2">Success!</h1>
+              <p className="text-gray-600">Redirecting to your dashboard...</p>
+            </>
+          )}
+
+          {status === "error" && (
+            <>
+              <XCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+              <h1 className="text-xl font-semibold mb-2">Verification Failed</h1>
+              <p className="text-gray-600 mb-4">{message}</p>
+              <button onClick={() => router.push("/")} className="text-blue-600 hover:text-blue-800 font-medium">
+                Return to homepage
+              </button>
+            </>
           )}
         </CardContent>
       </Card>

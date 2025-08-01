@@ -3,19 +3,18 @@
 import type React from "react"
 
 import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { X, Package, AlertCircle, CheckCircle } from "lucide-react"
+import { X, Package, Loader2, CheckCircle } from "lucide-react"
 
 interface AddProductProps {
-  onSuccess: () => void
-  onCancel: () => void
+  onClose: () => void
+  onProductAdded: () => void
 }
 
-export default function AddProduct({ onSuccess, onCancel }: AddProductProps) {
+export default function AddProduct({ onClose, onProductAdded }: AddProductProps) {
   const [formData, setFormData] = useState({
     name: "",
     brand: "",
@@ -24,15 +23,20 @@ export default function AddProduct({ onSuccess, onCancel }: AddProductProps) {
     purchase_date: "",
     purchase_price: "",
   })
-  const [isLoading, setIsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsLoading(true)
+
+    if (!formData.name.trim()) {
+      setError("Product name is required")
+      return
+    }
+
+    setLoading(true)
     setError("")
-    setSuccess("")
 
     try {
       const response = await fetch("/api/products", {
@@ -51,172 +55,138 @@ export default function AddProduct({ onSuccess, onCancel }: AddProductProps) {
         }),
       })
 
-      const data = await response.json()
-
       if (response.ok) {
-        setSuccess("Product added successfully!")
+        setSuccess(true)
         setTimeout(() => {
-          onSuccess()
-        }, 1000)
+          onProductAdded()
+        }, 1500)
       } else {
+        const data = await response.json()
         setError(data.error || "Failed to add product")
       }
-    } catch (err) {
-      setError("Network error. Please try again.")
+    } catch (error) {
+      console.error("Add product error:", error)
+      setError("Failed to add product. Please try again.")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  if (success) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-8 text-center">
+            <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Product Added!</h2>
+            <p className="text-gray-600">{formData.name} is now being monitored for recalls.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <Package className="h-5 w-5 text-blue-600" />
-            <CardTitle>Add Product</CardTitle>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Package className="h-5 w-5 text-blue-600" />
+              <CardTitle>Add Product</CardTitle>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <CardDescription>Add a product to monitor for recalls. Only the product name is required.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Required Field */}
-          <div>
-            <Label htmlFor="name" className="text-sm font-medium">
-              Product Name *
-            </Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="e.g., iPhone 15 Pro, Toyota Camry, Cheerios"
-              value={formData.name}
-              onChange={(e) => handleChange("name", e.target.value)}
-              required
-              disabled={isLoading}
-              className="mt-1"
-            />
-          </div>
+          <CardDescription>Add a product to monitor for safety recalls and alerts.</CardDescription>
+        </CardHeader>
 
-          {/* Optional Fields */}
-          <div className="grid grid-cols-2 gap-4">
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="brand" className="text-sm font-medium text-gray-600">
-                Brand (optional)
-              </Label>
+              <Label htmlFor="name">Product Name *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., iPhone 15 Pro, Toyota Camry, etc."
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="brand">Brand</Label>
               <Input
                 id="brand"
-                type="text"
-                placeholder="e.g., Apple, Toyota"
                 value={formData.brand}
-                onChange={(e) => handleChange("brand", e.target.value)}
-                disabled={isLoading}
-                className="mt-1"
+                onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                placeholder="e.g., Apple, Toyota, Samsung"
               />
             </div>
+
             <div>
-              <Label htmlFor="model" className="text-sm font-medium text-gray-600">
-                Model (optional)
-              </Label>
+              <Label htmlFor="model">Model</Label>
               <Input
                 id="model"
-                type="text"
-                placeholder="e.g., Pro Max, LE"
                 value={formData.model}
-                onChange={(e) => handleChange("model", e.target.value)}
-                disabled={isLoading}
-                className="mt-1"
+                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                placeholder="e.g., A2848, 2024, Galaxy S24"
               />
             </div>
-          </div>
 
-          <div>
-            <Label htmlFor="upc" className="text-sm font-medium text-gray-600">
-              UPC/Barcode (optional)
-            </Label>
-            <Input
-              id="upc"
-              type="text"
-              placeholder="e.g., 123456789012"
-              value={formData.upc}
-              onChange={(e) => handleChange("upc", e.target.value)}
-              disabled={isLoading}
-              className="mt-1"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="purchase_date" className="text-sm font-medium text-gray-600">
-                Purchase Date (optional)
-              </Label>
+              <Label htmlFor="upc">UPC/Barcode</Label>
+              <Input
+                id="upc"
+                value={formData.upc}
+                onChange={(e) => setFormData({ ...formData, upc: e.target.value })}
+                placeholder="e.g., 123456789012"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="purchase_date">Purchase Date</Label>
               <Input
                 id="purchase_date"
                 type="date"
                 value={formData.purchase_date}
-                onChange={(e) => handleChange("purchase_date", e.target.value)}
-                disabled={isLoading}
-                className="mt-1"
+                onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
               />
             </div>
+
             <div>
-              <Label htmlFor="purchase_price" className="text-sm font-medium text-gray-600">
-                Price (optional)
-              </Label>
+              <Label htmlFor="purchase_price">Purchase Price</Label>
               <Input
                 id="purchase_price"
                 type="number"
                 step="0.01"
-                placeholder="0.00"
                 value={formData.purchase_price}
-                onChange={(e) => handleChange("purchase_price", e.target.value)}
-                disabled={isLoading}
-                className="mt-1"
+                onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                placeholder="0.00"
               />
             </div>
-          </div>
 
-          {/* Success Message */}
-          {success && (
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">{success}</AlertDescription>
-            </Alert>
-          )}
+            {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">{error}</div>}
 
-          {/* Error Message */}
-          {error && (
-            <Alert className="border-red-200 bg-red-50">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Submit Button */}
-          <div className="flex space-x-3 pt-4">
-            <Button type="submit" disabled={isLoading || !formData.name.trim()} className="flex-1">
-              {isLoading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Adding Product...
-                </div>
-              ) : (
-                "Add Product"
-              )}
-            </Button>
-            <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+            <div className="flex space-x-3 pt-4">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1 bg-transparent">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading} className="flex-1">
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  "Add Product"
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

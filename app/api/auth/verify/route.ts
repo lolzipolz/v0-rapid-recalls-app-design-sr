@@ -1,72 +1,56 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-
-const sql = neon(process.env.DATABASE_URL!)
+import { sql, initializeDatabase } from "@/lib/database"
+import crypto from "crypto"
 
 export async function GET(request: NextRequest) {
   try {
+    await initializeDatabase()
+
     const { searchParams } = new URL(request.url)
     const token = searchParams.get("token")
 
     if (!token) {
-      console.log("❌ No token provided")
       return NextResponse.redirect(new URL("/?error=invalid-token", request.url))
     }
 
-    console.log("🔍 Verifying token:", token)
+    console.log(`🔍 Verifying token: ${token.substring(0, 8)}...`)
 
-    // Find the magic link token
-    const magicLinks = await sql`
-      SELECT * FROM magic_links 
-      WHERE token = ${token} 
-      AND expires_at > NOW() 
-      AND used = false
-    `
-
-    if (magicLinks.length === 0) {
-      console.log("❌ Invalid or expired token")
-      return NextResponse.redirect(new URL("/?error=invalid-token", request.url))
-    }
-
-    const magicLink = magicLinks[0]
-    console.log("✅ Valid magic link found for email:", magicLink.email)
-
-    // Find or create user
+    // Find user with valid magic link token
     const users = await sql`
-      SELECT * FROM users WHERE email = ${magicLink.email}
+      SELECT id, email 
+      FROM users 
+      WHERE magic_link_token = ${token} 
+      AND magic_link_expires > NOW()
     `
 
-    let user
     if (users.length === 0) {
-      console.log("👤 Creating new user for:", magicLink.email)
-      const newUsers = await sql`
-        INSERT INTO users (email, created_at, updated_at)
-        VALUES (${magicLink.email}, NOW(), NOW())
-        RETURNING *
-      `
-      user = newUsers[0]
-    } else {
-      user = users[0]
-      console.log("👤 Existing user found:", user.id)
+      console.log("❌ Invalid or expired token")
+      return NextResponse.redirect(new URL("/?error=expired-token", request.url))
     }
 
-    // Mark magic link as used
-    await sql`
-      UPDATE magic_links 
-      SET used = true, used_at = NOW() 
-      WHERE token = ${token}
-    `
+    const user = users[0]
+    console.log(`✅ Valid token for user: ${user.email}`)
 
-    // Create session
+    // Generate session token
     const sessionToken = crypto.randomUUID()
+    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+    // Update user with session and clear magic link
     await sql`
-      INSERT INTO sessions (user_id, token, expires_at, created_at)
-      VALUES (${user.id}, ${sessionToken}, NOW() + INTERVAL '30 days', NOW())
+      UPDATE users 
+      SET 
+        session_token = ${sessionToken},
+        session_expires = ${sessionExpires},
+        magic_link_token = NULL,
+        magic_link_expires = NULL,
+        last_login = NOW(),
+        updated_at = NOW()
+      WHERE id = ${user.id}
     `
 
-    console.log("🎉 Session created successfully for user:", user.id)
+    console.log(`🎫 Session created for ${user.email}`)
 
-    // Create response and set cookie
+    // Create response and set session cookie
     const response = NextResponse.redirect(new URL("/dashboard", request.url))
 
     response.cookies.set("session", sessionToken, {

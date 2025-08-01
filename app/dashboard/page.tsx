@@ -2,22 +2,24 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Dashboard } from "@/components/dashboard"
+import Dashboard from "@/components/dashboard"
 import { Loader2 } from "lucide-react"
 
 interface User {
   id: string
   email: string
+  notification_preferences: any
   created_at: string
+  last_login: string
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
 
   useEffect(() => {
-    const checkAuth = async () => {
+    async function checkAuth() {
       try {
         const response = await fetch("/api/auth/me", {
           credentials: "include",
@@ -25,7 +27,11 @@ export default function DashboardPage() {
 
         if (response.ok) {
           const data = await response.json()
-          setUser(data.user)
+          if (data.user) {
+            setUser(data.user)
+          } else {
+            router.push("/")
+          }
         } else {
           router.push("/")
         }
@@ -43,16 +49,13 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading your dashboard...</p>
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     )
   }
 
   if (!user) {
-    return null // Will redirect to home
+    return null // Will redirect
   }
 
   return <Dashboard user={user} />
