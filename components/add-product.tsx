@@ -8,35 +8,37 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload, Scan, Plus, Package, AlertCircle, CheckCircle } from "lucide-react"
+import { X, Upload, Scan, Plus, Loader2, Package, Receipt, Barcode } from "lucide-react"
 
 interface AddProductProps {
-  userId: string
-  onProductAdded?: () => void
+  onClose: () => void
+  onProductAdded: () => void
 }
 
-export function AddProduct({ userId, onProductAdded }: AddProductProps) {
+export default function AddProduct({ onClose, onProductAdded }: AddProductProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [message, setMessage] = useState("")
+  const [activeTab, setActiveTab] = useState("manual")
 
-  // Manual entry form state
+  // Manual form state
   const [manualForm, setManualForm] = useState({
     name: "",
     brand: "",
     model: "",
     upc: "",
-    purchaseDate: "",
-    purchasePrice: "",
+    purchase_date: "",
+    purchase_price: "",
   })
+
+  // Receipt upload state
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!manualForm.name.trim()) return
-
     setIsLoading(true)
-    setMessage(null)
+    setMessage("")
 
     try {
       const response = await fetch("/api/products", {
@@ -44,151 +46,165 @@ export function AddProduct({ userId, onProductAdded }: AddProductProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify({
-          userId,
-          name: manualForm.name,
-          brand: manualForm.brand || null,
-          model: manualForm.model || null,
-          upc: manualForm.upc || null,
-          purchaseDate: manualForm.purchaseDate || null,
-          purchasePrice: manualForm.purchasePrice ? Number.parseFloat(manualForm.purchasePrice) : null,
+          ...manualForm,
           source: "manual",
+          purchase_price: manualForm.purchase_price ? Number.parseFloat(manualForm.purchase_price) : null,
+          purchase_date: manualForm.purchase_date || null,
         }),
+        credentials: "include",
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setMessage({
-          type: "success",
-          text: "Product added successfully! We'll monitor it for recalls.",
-        })
-        setManualForm({
-          name: "",
-          brand: "",
-          model: "",
-          upc: "",
-          purchaseDate: "",
-          purchasePrice: "",
-        })
-        onProductAdded?.()
+        setMessage("Product added successfully!")
+        setTimeout(() => {
+          onProductAdded()
+        }, 1000)
       } else {
-        setMessage({
-          type: "error",
-          text: data.error || "Failed to add product. Please try again.",
-        })
+        setMessage(data.error || "Failed to add product")
       }
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: "Network error. Please check your connection and try again.",
-      })
+      setMessage("Network error. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleReceiptUpload = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!receiptFile) {
+      setMessage("Please select a receipt image")
+      return
+    }
 
     setIsLoading(true)
-    setMessage(null)
-
-    const formData = new FormData()
-    formData.append("receipt", file)
-    formData.append("userId", userId)
+    setMessage("")
 
     try {
+      const formData = new FormData()
+      formData.append("receipt", receiptFile)
+
       const response = await fetch("/api/products/upload-receipt", {
         method: "POST",
-        credentials: "include",
         body: formData,
+        credentials: "include",
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setMessage({
-          type: "success",
-          text: `Successfully processed receipt! Added ${data.productsAdded} products.`,
-        })
-        onProductAdded?.()
+        setMessage(`Successfully extracted ${data.products?.length || 0} products from receipt!`)
+        setTimeout(() => {
+          onProductAdded()
+        }, 2000)
       } else {
-        setMessage({
-          type: "error",
-          text: data.error || "Failed to process receipt. Please try again.",
-        })
+        setMessage(data.error || "Failed to process receipt")
       }
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: "Network error. Please check your connection and try again.",
+      setMessage("Network error. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setReceiptFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setReceiptPreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleUPCSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const formData = new FormData(e.target as HTMLFormElement)
+    const upc = formData.get("upc") as string
+
+    if (!upc) {
+      setMessage("Please enter a UPC code")
+      return
+    }
+
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      const response = await fetch("/api/products/lookup-upc", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ upc }),
+        credentials: "include",
       })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setMessage("Product added successfully!")
+        setTimeout(() => {
+          onProductAdded()
+        }, 1000)
+      } else {
+        setMessage(data.error || "Failed to lookup UPC")
+      }
+    } catch (error) {
+      setMessage("Network error. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Add Products</h1>
-        <p className="text-gray-600">Add products to your monitoring list to receive recall alerts</p>
-      </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Add Product</CardTitle>
+              <CardDescription>Add products to monitor for recalls</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="manual">
+                <Plus className="h-4 w-4 mr-2" />
+                Manual
+              </TabsTrigger>
+              <TabsTrigger value="receipt">
+                <Receipt className="h-4 w-4 mr-2" />
+                Receipt
+              </TabsTrigger>
+              <TabsTrigger value="upc">
+                <Barcode className="h-4 w-4 mr-2" />
+                UPC Scan
+              </TabsTrigger>
+            </TabsList>
 
-      {message && (
-        <Alert
-          className={`mb-6 ${message.type === "error" ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}
-        >
-          {message.type === "error" ? (
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          ) : (
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          )}
-          <AlertDescription className={message.type === "error" ? "text-red-700" : "text-green-700"}>
-            {message.text}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs defaultValue="manual" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="manual">
-            <Plus className="w-4 h-4 mr-2" />
-            Manual Entry
-          </TabsTrigger>
-          <TabsTrigger value="receipt">
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Receipt
-          </TabsTrigger>
-          <TabsTrigger value="barcode">
-            <Scan className="w-4 h-4 mr-2" />
-            Scan Barcode
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="manual">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Product Manually</CardTitle>
-              <CardDescription>Enter product details manually. Only product name is required.</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <TabsContent value="manual" className="space-y-4">
               <form onSubmit={handleManualSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Product Name *</Label>
-                  <Input
-                    id="name"
-                    value={manualForm.name}
-                    onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
-                    placeholder="e.g., iPhone 15 Pro"
-                    required
-                  />
-                </div>
-
                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name">Product Name *</Label>
+                    <Input
+                      id="name"
+                      value={manualForm.name}
+                      onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
+                      placeholder="e.g., iPhone 15 Pro"
+                      required
+                    />
+                  </div>
                   <div>
                     <Label htmlFor="brand">Brand</Label>
                     <Input
@@ -198,6 +214,9 @@ export function AddProduct({ userId, onProductAdded }: AddProductProps) {
                       placeholder="e.g., Apple"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="model">Model</Label>
                     <Input
@@ -207,36 +226,35 @@ export function AddProduct({ userId, onProductAdded }: AddProductProps) {
                       placeholder="e.g., A3108"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="upc">UPC/Barcode</Label>
-                  <Input
-                    id="upc"
-                    value={manualForm.upc}
-                    onChange={(e) => setManualForm({ ...manualForm, upc: e.target.value })}
-                    placeholder="e.g., 123456789012"
-                  />
+                  <div>
+                    <Label htmlFor="upc">UPC/Barcode</Label>
+                    <Input
+                      id="upc"
+                      value={manualForm.upc}
+                      onChange={(e) => setManualForm({ ...manualForm, upc: e.target.value })}
+                      placeholder="e.g., 123456789012"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="purchaseDate">Purchase Date</Label>
+                    <Label htmlFor="purchase_date">Purchase Date</Label>
                     <Input
-                      id="purchaseDate"
+                      id="purchase_date"
                       type="date"
-                      value={manualForm.purchaseDate}
-                      onChange={(e) => setManualForm({ ...manualForm, purchaseDate: e.target.value })}
+                      value={manualForm.purchase_date}
+                      onChange={(e) => setManualForm({ ...manualForm, purchase_date: e.target.value })}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="purchasePrice">Purchase Price</Label>
+                    <Label htmlFor="purchase_price">Purchase Price</Label>
                     <Input
-                      id="purchasePrice"
+                      id="purchase_price"
                       type="number"
                       step="0.01"
-                      value={manualForm.purchasePrice}
-                      onChange={(e) => setManualForm({ ...manualForm, purchasePrice: e.target.value })}
+                      value={manualForm.purchase_price}
+                      onChange={(e) => setManualForm({ ...manualForm, purchase_price: e.target.value })}
                       placeholder="0.00"
                     />
                   </div>
@@ -245,86 +263,109 @@ export function AddProduct({ userId, onProductAdded }: AddProductProps) {
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Adding Product...
                     </>
                   ) : (
                     <>
-                      <Package className="w-4 h-4 mr-2" />
+                      <Plus className="mr-2 h-4 w-4" />
                       Add Product
                     </>
                   )}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </TabsContent>
 
-        <TabsContent value="receipt">
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload Receipt</CardTitle>
-              <CardDescription>
-                Upload a photo of your receipt and we'll automatically extract product information.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <div className="space-y-2">
-                    <Label htmlFor="receipt-upload" className="cursor-pointer">
-                      <span className="text-blue-600 hover:text-blue-500">Click to upload</span> or drag and drop
-                    </Label>
-                    <p className="text-sm text-gray-500">PNG, JPG, PDF up to 10MB</p>
-                  </div>
-                  <Input
-                    id="receipt-upload"
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={handleReceiptUpload}
-                    className="hidden"
-                    disabled={isLoading}
-                  />
+            <TabsContent value="receipt" className="space-y-4">
+              <div className="text-center">
+                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">Upload Receipt</h3>
+                <p className="text-gray-600 mb-4">
+                  Upload a photo of your receipt and we'll extract the products automatically
+                </p>
+              </div>
+
+              <form onSubmit={handleReceiptUpload} className="space-y-4">
+                <div>
+                  <Label htmlFor="receipt">Receipt Image</Label>
+                  <Input id="receipt" type="file" accept="image/*" onChange={handleFileChange} required />
                 </div>
 
-                {isLoading && (
-                  <div className="text-center py-4">
-                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                    <p className="text-gray-600">Processing receipt...</p>
+                {receiptPreview && (
+                  <div className="mt-4">
+                    <img
+                      src={receiptPreview || "/placeholder.svg"}
+                      alt="Receipt preview"
+                      className="max-w-full h-48 object-contain mx-auto border rounded"
+                    />
                   </div>
                 )}
 
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">Tips for better results:</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• Ensure the receipt is clearly visible and well-lit</li>
-                    <li>• Include the entire receipt in the photo</li>
-                    <li>• Avoid shadows and glare</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                <Button type="submit" className="w-full" disabled={isLoading || !receiptFile}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing Receipt...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Process Receipt
+                    </>
+                  )}
+                </Button>
+              </form>
 
-        <TabsContent value="barcode">
-          <Card>
-            <CardHeader>
-              <CardTitle>Scan Barcode</CardTitle>
-              <CardDescription>Use your device's camera to scan product barcodes for quick addition.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <Scan className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Barcode Scanner</h3>
-                <p className="text-gray-600 mb-6">This feature will be available soon!</p>
-                <Badge variant="secondary">Coming Soon</Badge>
+              <Alert>
+                <AlertDescription>
+                  <strong>Tip:</strong> Make sure the receipt is clear and well-lit for best results.
+                </AlertDescription>
+              </Alert>
+            </TabsContent>
+
+            <TabsContent value="upc" className="space-y-4">
+              <div className="text-center">
+                <Barcode className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">UPC Lookup</h3>
+                <p className="text-gray-600 mb-4">Enter or scan a UPC barcode to automatically add product details</p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+
+              <form onSubmit={handleUPCSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="upc">UPC Code</Label>
+                  <Input name="upc" placeholder="Enter UPC barcode (e.g., 123456789012)" required />
+                </div>
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Looking up Product...
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="mr-2 h-4 w-4" />
+                      Lookup Product
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              <Alert>
+                <AlertDescription>
+                  <strong>Coming Soon:</strong> Camera barcode scanning will be available in the next update.
+                </AlertDescription>
+              </Alert>
+            </TabsContent>
+          </Tabs>
+
+          {message && (
+            <Alert className="mt-4">
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

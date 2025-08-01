@@ -1,43 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql, initializeDatabase } from "@/lib/database"
-import { cookies } from "next/headers"
+import { getCurrentUser } from "@/lib/database"
 
 export async function GET(request: NextRequest) {
   try {
-    await initializeDatabase()
-
-    const cookieStore = cookies()
-    const sessionToken = cookieStore.get("session")?.value
+    const sessionToken = request.cookies.get("session")?.value
 
     if (!sessionToken) {
-      return NextResponse.json({ user: null }, { status: 401 })
+      return NextResponse.json({ error: "No session token" }, { status: 401 })
     }
 
-    // Find user with valid session
-    const users = await sql`
-      SELECT id, email, notification_preferences, created_at, last_login
-      FROM users 
-      WHERE session_token = ${sessionToken} 
-      AND session_expires > NOW()
-    `
+    const user = await getCurrentUser(sessionToken)
 
-    if (users.length === 0) {
-      return NextResponse.json({ user: null }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ error: "Invalid or expired session" }, { status: 401 })
     }
-
-    const user = users[0]
 
     return NextResponse.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        notification_preferences: user.notification_preferences,
-        created_at: user.created_at,
-        last_login: user.last_login,
-      },
+      id: user.id,
+      email: user.email,
+      created_at: user.created_at,
     })
   } catch (error) {
-    console.error("Auth check error:", error)
-    return NextResponse.json({ error: "Authentication check failed" }, { status: 500 })
+    console.error("Auth me error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

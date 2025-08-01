@@ -2,66 +2,67 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Dashboard } from "@/components/dashboard"
-import { Card, CardContent } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
+import Dashboard from "@/components/dashboard"
+import WelcomeScreen from "@/components/welcome-screen"
 
 interface User {
   id: string
   email: string
-  notification_preferences: any
   created_at: string
-  last_login: string
 }
 
 export default function DashboardPage() {
-  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasProducts, setHasProducts] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
-    checkAuth()
-  }, [])
+    const checkAuth = async () => {
+      try {
+        const response = await fetch("/api/auth/me", {
+          credentials: "include",
+        })
 
-  const checkAuth = async () => {
-    try {
-      const response = await fetch("/api/auth/me", {
-        credentials: "include", // This ensures cookies are sent with the request
-      })
-      const data = await response.json()
+        if (!response.ok) {
+          router.push("/")
+          return
+        }
 
-      if (data.user) {
-        setUser(data.user)
-      } else {
+        const userData = await response.json()
+        setUser(userData)
+
+        // Check if user has products
+        const productsResponse = await fetch("/api/products", {
+          credentials: "include",
+        })
+
+        if (productsResponse.ok) {
+          const products = await productsResponse.json()
+          setHasProducts(products.length > 0)
+        }
+      } catch (error) {
+        console.error("Auth check failed:", error)
         router.push("/")
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error("Auth check failed:", error)
-      router.push("/")
-    } finally {
-      setIsLoading(false)
     }
-  }
+
+    checkAuth()
+  }, [router])
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="text-center space-y-4">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-              <h2 className="text-lg font-semibold text-gray-900">Loading Dashboard</h2>
-              <p className="text-gray-600">Please wait while we load your account...</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     )
   }
 
   if (!user) {
-    return null // Will redirect to home
+    return null
   }
 
-  return <Dashboard user={user} />
+  return hasProducts ? <Dashboard user={user} /> : <WelcomeScreen user={user} />
 }

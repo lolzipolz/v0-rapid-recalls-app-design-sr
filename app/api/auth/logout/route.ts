@@ -1,20 +1,38 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { sql, initializeDatabase } from "@/lib/database"
 import { cookies } from "next/headers"
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies()
+    await initializeDatabase()
 
-    // Clear the session cookie
-    cookieStore.set("session", "", {
+    const cookieStore = await cookies()
+    const sessionToken = cookieStore.get("session")?.value
+
+    if (sessionToken) {
+      // Clear session from database
+      await sql`
+        UPDATE users 
+        SET 
+          session_token = NULL,
+          session_expires = NULL,
+          updated_at = NOW()
+        WHERE session_token = ${sessionToken}
+      `
+    }
+
+    // Create response and clear session cookie
+    const response = NextResponse.json({ message: "Logged out successfully" })
+
+    response.cookies.set("session", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 0, // Expire immediately
+      expires: new Date(0),
       path: "/",
     })
 
-    return NextResponse.json({ success: true })
+    return response
   } catch (error) {
     console.error("Logout error:", error)
     return NextResponse.json({ error: "Logout failed" }, { status: 500 })

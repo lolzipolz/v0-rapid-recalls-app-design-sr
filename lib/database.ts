@@ -19,6 +19,24 @@ export async function testDatabaseConnection() {
   }
 }
 
+// Helper function to get current user from session
+export async function getCurrentUser(sessionToken: string) {
+  if (!sessionToken) return null
+
+  try {
+    const users = await sql`
+      SELECT * FROM users 
+      WHERE session_token = ${sessionToken} 
+      AND session_expires > NOW()
+    `
+
+    return users.length > 0 ? users[0] : null
+  } catch (error) {
+    console.error("Failed to get current user:", error)
+    return null
+  }
+}
+
 export async function initializeDatabase() {
   if (isInitialized) return
 
@@ -28,15 +46,25 @@ export async function initializeDatabase() {
     // Test connection first
     await testDatabaseConnection()
 
-    // Drop existing tables if they exist (for clean setup)
-    await sql`DROP TABLE IF EXISTS matched_recalls CASCADE`
-    await sql`DROP TABLE IF EXISTS products CASCADE`
-    await sql`DROP TABLE IF EXISTS recalls CASCADE`
-    await sql`DROP TABLE IF EXISTS users CASCADE`
+    // Check if tables exist
+    const tablesExist = await sql`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('users', 'products', 'recalls', 'matched_recalls')
+    `
+
+    if (tablesExist.length === 4) {
+      console.log("✅ Database tables already exist")
+      isInitialized = true
+      return
+    }
+
+    console.log("🔧 Creating database tables...")
 
     // Create users table with all required columns
     await sql`
-      CREATE TABLE users (
+      CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email VARCHAR(255) UNIQUE NOT NULL,
         session_token VARCHAR(255),
@@ -52,7 +80,7 @@ export async function initializeDatabase() {
 
     // Create products table
     await sql`
-      CREATE TABLE products (
+      CREATE TABLE IF NOT EXISTS products (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         name VARCHAR(500) NOT NULL,
@@ -71,7 +99,7 @@ export async function initializeDatabase() {
 
     // Create recalls table
     await sql`
-      CREATE TABLE recalls (
+      CREATE TABLE IF NOT EXISTS recalls (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         external_id VARCHAR(255) UNIQUE NOT NULL,
         title VARCHAR(1000) NOT NULL,
@@ -90,7 +118,7 @@ export async function initializeDatabase() {
 
     // Create matched_recalls table
     await sql`
-      CREATE TABLE matched_recalls (
+      CREATE TABLE IF NOT EXISTS matched_recalls (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -105,40 +133,20 @@ export async function initializeDatabase() {
     `
 
     // Create indexes for better performance
-    await sql`CREATE INDEX idx_users_email ON users(email)`
-    await sql`CREATE INDEX idx_users_session ON users(session_token)`
-    await sql`CREATE INDEX idx_users_magic_link ON users(magic_link_token)`
-    await sql`CREATE INDEX idx_products_user ON products(user_id)`
-    await sql`CREATE INDEX idx_products_upc ON products(upc)`
-    await sql`CREATE INDEX idx_recalls_agency ON recalls(agency)`
-    await sql`CREATE INDEX idx_recalls_date ON recalls(recall_date)`
-    await sql`CREATE INDEX idx_matched_recalls_user ON matched_recalls(user_id)`
-    await sql`CREATE INDEX idx_matched_recalls_product ON matched_recalls(product_id)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_session ON users(session_token)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_magic_link ON users(magic_link_token)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_products_upc ON products(upc)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_recalls_agency ON recalls(agency)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_recalls_date ON recalls(recall_date)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_matched_recalls_user ON matched_recalls(user_id)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_matched_recalls_product ON matched_recalls(product_id)`
 
     isInitialized = true
     console.log("✅ Database schema initialized successfully")
   } catch (error) {
     console.error("❌ Database initialization failed:", error)
     throw error
-  }
-}
-
-// Helper function to get current user from session
-export async function getCurrentUser(sessionToken: string) {
-  if (!sessionToken) return null
-
-  try {
-    await initializeDatabase()
-
-    const users = await sql`
-      SELECT * FROM users 
-      WHERE session_token = ${sessionToken} 
-      AND session_expires > NOW()
-    `
-
-    return users.length > 0 ? users[0] : null
-  } catch (error) {
-    console.error("Failed to get current user:", error)
-    return null
   }
 }

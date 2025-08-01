@@ -1,47 +1,59 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { sql, testDatabaseConnection, initializeDatabase } from "@/lib/database"
+import { NextResponse } from "next/server"
+import { sql, initializeDatabase, testDatabaseConnection } from "@/lib/database"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    console.log("🔍 Testing database connection...")
+    console.log("🔍 Starting database debug check...")
 
     // Test basic connection
     await testDatabaseConnection()
 
-    // Initialize database schema
+    // Initialize database (create tables if needed)
     await initializeDatabase()
 
-    // Test queries
+    // Check table structure
+    const tables = await sql`
+      SELECT table_name, column_name, data_type, is_nullable
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('users', 'products', 'recalls', 'matched_recalls')
+      ORDER BY table_name, ordinal_position
+    `
+
+    // Count records in each table
     const userCount = await sql`SELECT COUNT(*) as count FROM users`
     const productCount = await sql`SELECT COUNT(*) as count FROM products`
     const recallCount = await sql`SELECT COUNT(*) as count FROM recalls`
+    const matchedRecallCount = await sql`SELECT COUNT(*) as count FROM matched_recalls`
 
-    const dbInfo = {
-      status: "✅ Connected",
-      database_url: process.env.DATABASE_URL ? "✅ Set" : "❌ Missing",
+    // Get sample data
+    const sampleUsers = await sql`SELECT id, email, created_at FROM users LIMIT 3`
+
+    return NextResponse.json({
+      status: "✅ Database connection successful",
       tables: {
-        users: userCount[0].count,
-        products: productCount[0].count,
-        recalls: recallCount[0].count,
+        structure: tables,
+        counts: {
+          users: userCount[0].count,
+          products: productCount[0].count,
+          recalls: recallCount[0].count,
+          matched_recalls: matchedRecallCount[0].count,
+        },
       },
-      environment: process.env.NODE_ENV,
+      sample_data: {
+        users: sampleUsers,
+      },
       timestamp: new Date().toISOString(),
-    }
-
-    console.log("Database info:", dbInfo)
-
-    return NextResponse.json(dbInfo)
+    })
   } catch (error) {
-    console.error("❌ Database debug error:", error)
-
-    const errorInfo = {
-      status: "❌ Error",
-      error: error instanceof Error ? error.message : "Unknown error",
-      database_url: process.env.DATABASE_URL ? "✅ Set" : "❌ Missing",
-      environment: process.env.NODE_ENV,
-      timestamp: new Date().toISOString(),
-    }
-
-    return NextResponse.json(errorInfo, { status: 500 })
+    console.error("❌ Database debug failed:", error)
+    return NextResponse.json(
+      {
+        status: "❌ Database connection failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 },
+    )
   }
 }

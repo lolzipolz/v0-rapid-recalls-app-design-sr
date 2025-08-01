@@ -6,65 +6,64 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { RecallAlertCard } from "@/components/recall-alert-card"
-import { Shield, Plus, Package, AlertTriangle, CheckCircle, Settings, LogOut, Bell, TrendingUp } from "lucide-react"
-
-interface User {
-  id: string
-  email: string
-  notification_preferences: any
-  created_at: string
-  last_login: string
-}
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Shield, Plus, Package, AlertTriangle, LogOut, Bell, TrendingUp } from "lucide-react"
+import AddProduct from "./add-product"
+import RecallAlertCard from "./recall-alert-card"
 
 interface Product {
   id: string
   name: string
-  brand?: string
-  model?: string
-  upc?: string
-  purchase_date?: string
-  purchase_price?: number
+  brand: string | null
+  model: string | null
+  upc: string | null
+  purchase_date: string | null
+  purchase_price: number | null
   source: string
   created_at: string
 }
 
-interface Recall {
+interface MatchedRecall {
   id: string
-  product_name: string
-  product_brand?: string
-  recall_title: string
-  agency: string
-  severity: "high" | "medium" | "low"
-  description: string
-  recall_date: string
-  link: string
+  product_id: string
+  recall_id: string
+  match_type: string
   confidence_score: number
-  acknowledged_at?: string
-  resolved_at?: string
+  acknowledged_at: string | null
+  resolved_at: string | null
   created_at: string
+  product: Product
+  recall: {
+    id: string
+    title: string
+    description: string
+    agency: string
+    severity: string
+    recall_date: string
+    link: string
+  }
 }
 
 interface DashboardProps {
-  user: User
+  user: any
 }
 
-export function Dashboard({ user }: DashboardProps) {
-  const router = useRouter()
+export default function Dashboard({ user }: DashboardProps) {
   const [products, setProducts] = useState<Product[]>([])
-  const [recalls, setRecalls] = useState<Recall[]>([])
+  const [matchedRecalls, setMatchedRecalls] = useState<MatchedRecall[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [showAddProduct, setShowAddProduct] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     loadDashboardData()
-  }, [user.id])
+  }, [])
 
   const loadDashboardData = async () => {
     try {
       setIsLoading(true)
 
-      // Load products - include credentials for authenticated requests
+      // Load products
       const productsResponse = await fetch(`/api/products?userId=${user.id}`, {
         credentials: "include",
       })
@@ -73,17 +72,16 @@ export function Dashboard({ user }: DashboardProps) {
         setProducts(productsData.products || [])
       }
 
-      // Load recalls - include credentials for authenticated requests
+      // Load matched recalls
       const recallsResponse = await fetch(`/api/recalls?userId=${user.id}`, {
         credentials: "include",
       })
       if (recallsResponse.ok) {
         const recallsData = await recallsResponse.json()
-        setRecalls(recallsData.recalls || [])
+        setMatchedRecalls(recallsData.matched_recalls || [])
       }
     } catch (error) {
       console.error("Failed to load dashboard data:", error)
-      setError("Failed to load dashboard data")
     } finally {
       setIsLoading(false)
     }
@@ -98,39 +96,43 @@ export function Dashboard({ user }: DashboardProps) {
       router.push("/")
     } catch (error) {
       console.error("Logout failed:", error)
+      router.push("/")
     }
   }
 
-  const activeRecalls = recalls.filter((r) => !r.resolved_at)
-  const highPriorityRecalls = activeRecalls.filter((r) => r.severity === "high")
+  const handleProductAdded = () => {
+    setShowAddProduct(false)
+    loadDashboardData()
+  }
+
+  const activeRecalls = matchedRecalls.filter((mr) => !mr.resolved_at)
+  const resolvedRecalls = matchedRecalls.filter((mr) => mr.resolved_at)
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center mr-3">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">RapidRecalls</h1>
-                <p className="text-sm text-gray-600">Welcome back, {user.email}</p>
-              </div>
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-3">
+              <Shield className="h-8 w-8 text-blue-600" />
+              <h1 className="text-2xl font-bold text-gray-900">RapidRecalls</h1>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm">
-                <Bell className="w-4 h-4 mr-2" />
-                Notifications
-              </Button>
-              <Button variant="ghost" size="sm">
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
-                <LogOut className="w-4 h-4 mr-2" />
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <Shield className="h-4 w-4" />
+                <span>{user.email}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </Button>
             </div>
@@ -138,185 +140,191 @@ export function Dashboard({ user }: DashboardProps) {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8">
-        {error && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Products</p>
-                  <p className="text-2xl font-bold text-gray-900">{products.length}</p>
-                </div>
-                <Package className="w-8 h-8 text-blue-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{products.length}</div>
+              <p className="text-xs text-muted-foreground">Products being monitored</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active Recalls</p>
-                  <p className="text-2xl font-bold text-gray-900">{activeRecalls.length}</p>
-                </div>
-                <AlertTriangle className="w-8 h-8 text-orange-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Recalls</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">{activeRecalls.length}</div>
+              <p className="text-xs text-muted-foreground">Requiring your attention</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">High Priority</p>
-                  <p className="text-2xl font-bold text-red-600">{highPriorityRecalls.length}</p>
-                </div>
-                <Shield className="w-8 h-8 text-red-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Notifications</CardTitle>
+              <Bell className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{matchedRecalls.length}</div>
+              <p className="text-xs text-muted-foreground">Total recall matches</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Monitoring</p>
-                  <p className="text-2xl font-bold text-green-600">24/7</p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-green-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Monitoring</CardTitle>
+              <TrendingUp className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">24/7</div>
+              <p className="text-xs text-muted-foreground">Continuous monitoring for recalls</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Active Recalls */}
+        {/* Active Recalls Alert */}
         {activeRecalls.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Active Recalls</h2>
-              <Badge variant="destructive">{activeRecalls.length} Active</Badge>
-            </div>
-            <div className="space-y-4">
-              {activeRecalls.slice(0, 3).map((recall) => (
-                <RecallAlertCard key={recall.id} recall={recall} />
-              ))}
-              {activeRecalls.length > 3 && (
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <p className="text-gray-600">{activeRecalls.length - 3} more active recalls</p>
-                    <Button variant="outline" size="sm" className="mt-2 bg-transparent">
-                      View All Recalls
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">
+              You have {activeRecalls.length} active recall{activeRecalls.length !== 1 ? "s" : ""} that need your
+              attention.
+            </AlertDescription>
+          </Alert>
         )}
 
-        {/* Products Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* My Products */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>My Products</CardTitle>
-                  <CardDescription>{products.length} products being monitored</CardDescription>
-                </div>
-                <Button onClick={() => router.push("/add-product")}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Product
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading products...</p>
-                </div>
-              ) : products.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No products yet</h3>
-                  <p className="text-gray-600 mb-4">Add your first product to start monitoring for recalls</p>
-                  <Button onClick={() => router.push("/add-product")}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Your First Product
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {products.slice(0, 5).map((product) => (
-                    <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{product.name}</p>
-                        {product.brand && <p className="text-sm text-gray-600">{product.brand}</p>}
-                      </div>
-                      <Badge variant="outline">{product.source}</Badge>
-                    </div>
-                  ))}
-                  {products.length > 5 && (
-                    <div className="text-center pt-2">
-                      <Button variant="outline" size="sm">
-                        View All {products.length} Products
-                      </Button>
-                    </div>
-                  )}
-                </div>
+        {/* Main Content */}
+        <Tabs defaultValue="recalls" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="recalls">
+              Recalls{" "}
+              {activeRecalls.length > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {activeRecalls.length}
+                </Badge>
               )}
-            </CardContent>
-          </Card>
+            </TabsTrigger>
+            <TabsTrigger value="products">Products ({products.length})</TabsTrigger>
+          </TabsList>
 
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Latest updates and notifications</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {recalls.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">All Clear!</h3>
-                  <p className="text-gray-600">No recalls found for your products. We're monitoring 24/7.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recalls.slice(0, 5).map((recall) => (
-                    <div key={recall.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <div
-                        className={`w-2 h-2 rounded-full mt-2 ${
-                          recall.severity === "high"
-                            ? "bg-red-500"
-                            : recall.severity === "medium"
-                              ? "bg-orange-500"
-                              : "bg-yellow-500"
-                        }`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{recall.recall_title}</p>
-                        <p className="text-xs text-gray-600">
-                          {recall.agency} • {new Date(recall.recall_date).toLocaleDateString()}
-                        </p>
-                      </div>
+          <TabsContent value="recalls" className="space-y-4">
+            {matchedRecalls.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No recalls found</h3>
+                    <p className="text-gray-600">Great news! None of your products have been recalled.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {activeRecalls.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Active Recalls</h3>
+                    <div className="space-y-4">
+                      {activeRecalls.map((matchedRecall) => (
+                        <RecallAlertCard
+                          key={matchedRecall.id}
+                          matchedRecall={matchedRecall}
+                          onUpdate={loadDashboardData}
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                  </div>
+                )}
+
+                {resolvedRecalls.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 mt-8">Resolved Recalls</h3>
+                    <div className="space-y-4">
+                      {resolvedRecalls.map((matchedRecall) => (
+                        <RecallAlertCard
+                          key={matchedRecall.id}
+                          matchedRecall={matchedRecall}
+                          onUpdate={loadDashboardData}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="products" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Your Products</h3>
+              <Button onClick={() => setShowAddProduct(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Product
+              </Button>
+            </div>
+
+            {products.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No products yet</h3>
+                    <p className="text-gray-600 mb-4">Start by adding products you want to monitor for recalls.</p>
+                    <Button onClick={() => setShowAddProduct(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Your First Product
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {products.map((product) => (
+                  <Card key={product.id}>
+                    <CardHeader>
+                      <CardTitle className="text-base">{product.name}</CardTitle>
+                      {product.brand && <CardDescription>{product.brand}</CardDescription>}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        {product.model && (
+                          <div>
+                            <span className="font-medium">Model:</span> {product.model}
+                          </div>
+                        )}
+                        {product.upc && (
+                          <div>
+                            <span className="font-medium">UPC:</span> {product.upc}
+                          </div>
+                        )}
+                        {product.purchase_date && (
+                          <div>
+                            <span className="font-medium">Purchased:</span>{" "}
+                            {new Date(product.purchase_date).toLocaleDateString()}
+                          </div>
+                        )}
+                        <div>
+                          <Badge variant="secondary" className="text-xs">
+                            {product.source}
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      {/* Add Product Modal */}
+      {showAddProduct && <AddProduct onClose={() => setShowAddProduct(false)} onProductAdded={handleProductAdded} />}
     </div>
   )
 }
