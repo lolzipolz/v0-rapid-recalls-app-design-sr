@@ -1,18 +1,40 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import WelcomeScreen from "@/components/welcome-screen"
+import { useRouter, useSearchParams } from "next/navigation"
+import { WelcomeScreen } from "@/components/welcome-screen"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 import { Loader2 } from "lucide-react"
 
 export default function HomePage() {
-  const [isLoading, setIsLoading] = useState(true)
-  const [user, setUser] = useState(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Check for error parameters from auth redirects
+    const errorParam = searchParams.get("error")
+    if (errorParam) {
+      switch (errorParam) {
+        case "invalid-link":
+          setError("Invalid login link. Please request a new one.")
+          break
+        case "expired-link":
+          setError("Login link has expired. Please request a new one.")
+          break
+        case "verification-failed":
+          setError("Login verification failed. Please try again.")
+          break
+        default:
+          setError("An error occurred during login. Please try again.")
+      }
+    }
+
+    // Check if user is already authenticated
     checkAuth()
-  }, [])
+  }, [router, searchParams])
 
   const checkAuth = async () => {
     try {
@@ -20,14 +42,12 @@ export default function HomePage() {
       const data = await response.json()
 
       if (data.user) {
-        setUser(data.user)
+        // User is authenticated, redirect to dashboard
         router.push("/dashboard")
-      } else {
-        setUser(null)
+        return
       }
     } catch (error) {
       console.error("Auth check failed:", error)
-      setUser(null)
     } finally {
       setIsLoading(false)
     }
@@ -44,5 +64,17 @@ export default function HomePage() {
     )
   }
 
-  return <WelcomeScreen />
+  return (
+    <div>
+      {error && (
+        <div className="bg-red-50 border-b border-red-200 p-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
+      )}
+      <WelcomeScreen />
+    </div>
+  )
 }

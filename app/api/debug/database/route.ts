@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     // Test basic connection
     await testDatabaseConnection()
 
-    // Initialize database
+    // Initialize database schema
     await initializeDatabase()
 
     // Test queries
@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
     const productCount = await sql`SELECT COUNT(*) as count FROM products`
     const recallCount = await sql`SELECT COUNT(*) as count FROM recalls`
 
-    const info = {
-      status: "✅ Database connection successful",
+    const dbInfo = {
+      status: "✅ Connected",
       database_url: process.env.DATABASE_URL ? "✅ Set" : "❌ Missing",
       tables: {
         users: userCount[0].count,
@@ -28,15 +28,15 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     }
 
-    console.log("Database info:", info)
+    console.log("Database info:", dbInfo)
 
-    return NextResponse.json(info)
+    return NextResponse.json(dbInfo)
   } catch (error) {
     console.error("❌ Database debug error:", error)
 
     const errorInfo = {
-      status: "❌ Database connection failed",
-      error: error.message,
+      status: "❌ Error",
+      error: error instanceof Error ? error.message : "Unknown error",
       database_url: process.env.DATABASE_URL ? "✅ Set" : "❌ Missing",
       environment: process.env.NODE_ENV,
       timestamp: new Date().toISOString(),

@@ -1,17 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql, initializeDatabase } from "@/lib/database"
-import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("🔄 Processing magic link verification...")
+
     await initializeDatabase()
 
     const { searchParams } = new URL(request.url)
     const token = searchParams.get("token")
 
     if (!token) {
+      console.log("❌ No token provided")
       return NextResponse.redirect(new URL("/?error=invalid-link", request.url))
     }
+
+    console.log(`🔍 Verifying token: ${token.substring(0, 8)}...`)
 
     // Find user with valid magic link token
     const users = await sql`
@@ -21,10 +25,12 @@ export async function GET(request: NextRequest) {
     `
 
     if (users.length === 0) {
+      console.log("❌ Invalid or expired token")
       return NextResponse.redirect(new URL("/?error=expired-link", request.url))
     }
 
     const user = users[0]
+    console.log(`👤 User found: ${user.email}`)
 
     // Generate session token
     const sessionToken = crypto.randomUUID()
@@ -43,11 +49,12 @@ export async function GET(request: NextRequest) {
       WHERE id = ${user.id}
     `
 
-    // Create response and set session cookie
+    console.log("✅ Session created successfully")
+
+    // Create response and set session cookie using response.cookies.set
     const response = NextResponse.redirect(new URL("/dashboard", request.url))
 
-    const cookieStore = cookies()
-    cookieStore.set("session", sessionToken, {
+    response.cookies.set("session", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -55,7 +62,7 @@ export async function GET(request: NextRequest) {
       path: "/",
     })
 
-    console.log(`✅ User ${user.email} logged in successfully`)
+    console.log(`✅ User ${user.email} logged in successfully with session cookie`)
 
     return response
   } catch (error) {

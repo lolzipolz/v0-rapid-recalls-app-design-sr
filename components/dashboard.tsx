@@ -57,33 +57,33 @@ export function Dashboard({ user }: DashboardProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setIsLoading(true)
-
-        // Load products
-        const productsResponse = await fetch(`/api/products?userId=${user.id}`)
-        if (productsResponse.ok) {
-          const productsData = await productsResponse.json()
-          setProducts(productsData.products || [])
-        }
-
-        // Load recalls
-        const recallsResponse = await fetch(`/api/recalls?userId=${user.id}`)
-        if (recallsResponse.ok) {
-          const recallsData = await recallsResponse.json()
-          setRecalls(recallsData.recalls || [])
-        }
-      } catch (error) {
-        console.error("Failed to load dashboard data:", error)
-        setError("Failed to load dashboard data")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     loadDashboardData()
   }, [user.id])
+
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true)
+
+      // Load products
+      const productsResponse = await fetch(`/api/products?userId=${user.id}`)
+      if (productsResponse.ok) {
+        const productsData = await productsResponse.json()
+        setProducts(productsData.products || [])
+      }
+
+      // Load recalls
+      const recallsResponse = await fetch(`/api/recalls?userId=${user.id}`)
+      if (recallsResponse.ok) {
+        const recallsData = await recallsResponse.json()
+        setRecalls(recallsData.recalls || [])
+      }
+    } catch (error) {
+      console.error("Failed to load dashboard data:", error)
+      setError("Failed to load dashboard data")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleLogout = async () => {
     try {

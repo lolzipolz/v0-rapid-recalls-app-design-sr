@@ -3,12 +3,14 @@ import { Loader2 } from "lucide-react"
 
 export default function VerifyLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
-        <CardContent className="p-8 text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Verifying Login</h2>
-          <p className="text-gray-600">Please wait while we log you in...</p>
+        <CardContent className="pt-6">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+            <h2 className="text-xl font-semibold">Verifying...</h2>
+            <p className="text-gray-600">Please wait while we verify your login.</p>
+          </div>
         </CardContent>
       </Card>
     </div>
