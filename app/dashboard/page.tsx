@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation"
 import { Dashboard } from "@/components/dashboard"
 import { Loader2 } from "lucide-react"
 
+interface User {
+  id: string
+  email: string
+  created_at: string
+}
+
 export default function DashboardPage() {
-  const [user, setUser] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
@@ -17,9 +23,8 @@ export default function DashboardPage() {
           credentials: "include",
         })
 
-        const data = await response.json()
-
-        if (data.user) {
+        if (response.ok) {
+          const data = await response.json()
           setUser(data.user)
         } else {
           router.push("/")
@@ -28,19 +33,19 @@ export default function DashboardPage() {
         console.error("Auth check failed:", error)
         router.push("/")
       } finally {
-        setIsLoading(false)
+        setLoading(false)
       }
     }
 
     checkAuth()
   }, [router])
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading dashboard...</p>
+          <p className="text-gray-600">Loading your dashboard...</p>
         </div>
       </div>
     )

@@ -1,25 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql, initializeDatabase } from "@/lib/database"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    await initializeDatabase()
-
-    const sessionToken = request.cookies.get("session_token")?.value
+    const sessionToken = request.cookies.get("session")?.value
 
     if (sessionToken) {
-      // Clear session from database
+      // Delete session from database
       await sql`
-        UPDATE users 
-        SET session_token = NULL, session_expires = NULL 
-        WHERE session_token = ${sessionToken}
+        DELETE FROM sessions WHERE token = ${sessionToken}
       `
     }
 
-    // Create response and clear session cookie
-    const response = NextResponse.json({ message: "Logged out successfully" })
+    // Create response and clear cookie
+    const response = NextResponse.json({ success: true })
 
-    response.cookies.set("session_token", "", {
+    response.cookies.set("session", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -29,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
-    console.error("Logout failed:", error)
+    console.error("❌ Logout error:", error)
     return NextResponse.json({ error: "Logout failed" }, { status: 500 })
   }
 }

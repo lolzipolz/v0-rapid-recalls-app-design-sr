@@ -1,40 +1,43 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/database"
-
-// Force dynamic rendering
-export const dynamic = "force-dynamic"
+import { sql, getCurrentUser, initializeDatabase } from "@/lib/database"
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
+    await initializeDatabase()
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 })
+    const sessionToken = request.cookies.get("session")?.value
+
+    if (!sessionToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get matched recalls for the user
+    const user = await getCurrentUser(sessionToken)
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get matched recalls for this user
     const recalls = await sql`
       SELECT 
         mr.*,
-        p.name as product_name,
-        p.brand as product_brand,
-        r.title as recall_title,
+        r.title,
+        r.description,
         r.agency,
         r.severity,
-        r.description,
         r.recall_date,
-        r.link
+        r.link,
+        p.name as product_name
       FROM matched_recalls mr
-      JOIN products p ON mr.product_id = p.id
       JOIN recalls r ON mr.recall_id = r.id
-      WHERE mr.user_id = ${userId}
-      ORDER BY r.severity DESC, mr.confidence_score DESC, mr.created_at DESC
+      JOIN products p ON mr.product_id = p.id
+      WHERE mr.user_id = ${user.id}
+      ORDER BY r.recall_date DESC, mr.created_at DESC
     `
 
     return NextResponse.json({ recalls })
   } catch (error) {
-    console.error("Failed to fetch recalls:", error)
+    console.error("Get recalls error:", error)
     return NextResponse.json({ error: "Failed to fetch recalls" }, { status: 500 })
   }
 }

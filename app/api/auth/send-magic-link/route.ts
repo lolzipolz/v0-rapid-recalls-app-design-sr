@@ -1,156 +1,73 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql, initializeDatabase } from "@/lib/database"
-import crypto from "crypto"
-import sgMail from "@sendgrid/mail"
+import { neon } from "@neondatabase/serverless"
 
-// Initialize SendGrid
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY)
-}
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: NextRequest) {
   try {
-    await initializeDatabase()
-
-    console.log("🔄 Processing magic link request...")
-
     const { email } = await request.json()
 
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Valid email is required" }, { status: 400 })
     }
 
-    const normalizedEmail = email.toLowerCase().trim()
-    console.log(`📧 Processing request for: ${normalizedEmail}`)
+    console.log("📧 Sending magic link to:", email)
 
     // Generate magic link token
-    const magicToken = crypto.randomUUID()
-    const magicExpires = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+    const token = crypto.randomUUID()
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
-    console.log(`🔑 Generated token: ${magicToken.substring(0, 8)}...`)
-
-    // Create or update user
+    // Store magic link
     await sql`
-      INSERT INTO users (email, magic_link_token, magic_link_expires)
-      VALUES (${normalizedEmail}, ${magicToken}, ${magicExpires})
-      ON CONFLICT (email) 
-      DO UPDATE SET 
-        magic_link_token = ${magicToken},
-        magic_link_expires = ${magicExpires},
-        updated_at = NOW()
+      INSERT INTO magic_links (email, token, expires_at, created_at)
+      VALUES (${email}, ${token}, ${expiresAt}, NOW())
     `
 
-    // Construct magic link
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:3000"
+    // Create magic link URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    const magicLink = `${baseUrl}/auth/verify?token=${token}`
 
-    const magicLink = `${baseUrl}/auth/verify?token=${magicToken}`
+    console.log("🔗 Magic link generated:", magicLink)
 
-    console.log(`🔗 Magic link created: ${magicLink}`)
-
-    // In development, return the magic link for easy testing
-    const isDevelopment = process.env.NODE_ENV === "development"
-
-    if (isDevelopment) {
-      console.log(`🔗 Magic link for ${email}: ${magicLink}`)
-      return NextResponse.json({
-        message: "Magic link sent! Check your email or use the link below.",
-        magicLink: magicLink,
-      })
-    }
-
-    // In production, send email
+    // Try to send email with SendGrid
     if (process.env.SENDGRID_API_KEY && process.env.FROM_EMAIL) {
-      const msg = {
-        to: normalizedEmail,
-        from: process.env.FROM_EMAIL,
-        subject: "🔐 Your RapidRecalls Login Link",
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Login to RapidRecalls</title>
-          </head>
-          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #2563eb; margin: 0;">🛡️ RapidRecalls</h1>
-              <p style="color: #666; margin: 5px 0 0 0;">Product Safety Alerts</p>
-            </div>
-            
-            <div style="background: #f8fafc; border-radius: 8px; padding: 30px; margin: 20px 0;">
-              <h2 style="color: #1e293b; margin-top: 0;">Welcome back!</h2>
-              <p style="color: #475569; margin-bottom: 25px;">Click the button below to securely log in to your RapidRecalls account. This link will expire in 15 minutes.</p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${magicLink}" style="background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
-                  🔐 Log In to RapidRecalls
-                </a>
-              </div>
-              
-              <p style="color: #64748b; font-size: 14px; margin-top: 25px;">
-                If the button doesn't work, copy and paste this link into your browser:<br>
-                <a href="${magicLink}" style="color: #2563eb; word-break: break-all;">${magicLink}</a>
-              </p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-                This email was sent to ${normalizedEmail}. If you didn't request this login link, you can safely ignore this email.
-              </p>
-            </div>
-          </body>
-          </html>
-        `,
-        text: `
-          Welcome to RapidRecalls!
-          
-          Click this link to log in to your account:
-          ${magicLink}
-          
-          This link will expire in 15 minutes.
-          
-          If you didn't request this login link, you can safely ignore this email.
-        `,
-      }
-
       try {
-        await sgMail.send(msg)
-        console.log(`✅ Magic link email sent to: ${normalizedEmail}`)
+        const sgMail = require("@sendgrid/mail")
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
-        return NextResponse.json({
-          success: true,
-          message: "Magic link sent! Check your email.",
-        })
+        const msg = {
+          to: email,
+          from: process.env.FROM_EMAIL,
+          subject: "Your RapidRecalls Login Link",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #2563eb;">Welcome to RapidRecalls</h2>
+              <p>Click the link below to sign in to your account:</p>
+              <a href="${magicLink}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+                Sign In to RapidRecalls
+              </a>
+              <p style="color: #666; font-size: 14px;">This link will expire in 15 minutes.</p>
+              <p style="color: #666; font-size: 14px;">If you didn't request this, you can safely ignore this email.</p>
+            </div>
+          `,
+        }
+
+        await sgMail.send(msg)
+        console.log("✅ Email sent successfully via SendGrid")
       } catch (emailError) {
         console.error("❌ SendGrid error:", emailError)
-
-        // Fallback: log the magic link
-        console.log(`
-        📧 EMAIL FAILED - MAGIC LINK FOR ${normalizedEmail}:
-        ${magicLink}
-        `)
-
-        return NextResponse.json({
-          success: true,
-          message: "Magic link generated! Check server logs for the link.",
-          ...(process.env.NODE_ENV === "development" && { magicLink }),
-        })
+        console.log("📧 Fallback: Magic link ->", magicLink)
       }
+    } else {
+      console.log("📧 SendGrid not configured. Magic link:", magicLink)
     }
 
-    // Always log the magic link for debugging
-    console.log(`🔗 Magic link generated for ${email}: ${magicLink}`)
-
     return NextResponse.json({
-      message: "Magic link sent! Check your email to sign in.",
-      ...(isDevelopment && { magicLink }),
+      success: true,
+      message: "Magic link sent! Check your email.",
     })
   } catch (error) {
-    console.error("Failed to send magic link:", error)
+    console.error("❌ Send magic link error:", error)
     return NextResponse.json({ error: "Failed to send magic link" }, { status: 500 })
   }
 }

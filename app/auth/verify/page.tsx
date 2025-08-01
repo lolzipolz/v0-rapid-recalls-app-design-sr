@@ -1,63 +1,84 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import { AlertTriangle, CheckCircle } from "lucide-react"
+import { CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 
 export default function VerifyPage() {
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading")
+  const [message, setMessage] = useState("")
   const router = useRouter()
   const searchParams = useSearchParams()
-  const error = searchParams.get("error")
 
   useEffect(() => {
-    // If no error, the verification was successful and user was redirected to dashboard
-    // This page only shows if there was an error
-  }, [])
+    const token = searchParams.get("token")
 
-  const getErrorMessage = (error: string | null) => {
-    switch (error) {
-      case "invalid-token":
-        return "The magic link is invalid. Please request a new one."
-      case "expired-token":
-        return "The magic link has expired. Please request a new one."
-      case "verification-failed":
-        return "Verification failed. Please try again."
-      default:
-        return "An unknown error occurred. Please try again."
+    if (!token) {
+      setStatus("error")
+      setMessage("No verification token provided")
+      return
     }
-  }
 
-  if (!error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" />
-          <h2 className="text-xl font-medium text-gray-900 mb-2">Verification Successful!</h2>
-          <p className="text-gray-600">Redirecting you to the dashboard...</p>
-        </div>
-      </div>
-    )
-  }
+    // The verification happens on the server via the GET route
+    // If we reach this page, it means there was an issue
+    const error = searchParams.get("error")
+
+    if (error) {
+      setStatus("error")
+      switch (error) {
+        case "invalid-token":
+          setMessage("Invalid or expired verification link")
+          break
+        case "verification-failed":
+          setMessage("Verification failed. Please try again.")
+          break
+        default:
+          setMessage("An error occurred during verification")
+      }
+    } else {
+      // This shouldn't happen if verification was successful
+      setStatus("error")
+      setMessage("Verification incomplete")
+    }
+  }, [searchParams])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full mx-4">
-        <div className="text-center mb-6">
-          <AlertTriangle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-xl font-medium text-gray-900 mb-2">Verification Failed</h2>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center space-x-2">
+            {status === "loading" && <Loader2 className="h-5 w-5 animate-spin text-blue-600" />}
+            {status === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
+            {status === "error" && <AlertCircle className="h-5 w-5 text-red-600" />}
+            <span>
+              {status === "loading" && "Verifying..."}
+              {status === "success" && "Verification Successful"}
+              {status === "error" && "Verification Failed"}
+            </span>
+          </CardTitle>
+          <CardDescription>
+            {status === "loading" && "Please wait while we verify your account"}
+            {status === "success" && "Redirecting you to your dashboard"}
+            {status === "error" && "There was a problem with your verification link"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {status === "error" && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">{message}</AlertDescription>
+            </Alert>
+          )}
 
-        <Alert className="mb-6">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{getErrorMessage(error)}</AlertDescription>
-        </Alert>
-
-        <Button onClick={() => router.push("/")} className="w-full">
-          Return to Homepage
-        </Button>
-      </div>
+          {status === "loading" && (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

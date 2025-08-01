@@ -1,37 +1,39 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCurrentUser, initializeDatabase } from "@/lib/database"
+import { neon } from "@neondatabase/serverless"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 export async function GET(request: NextRequest) {
   try {
-    await initializeDatabase()
-
-    const sessionToken = request.cookies.get("session_token")?.value
+    const sessionToken = request.cookies.get("session")?.value
 
     if (!sessionToken) {
-      return NextResponse.json({ user: null }, { status: 200 })
+      return NextResponse.json({ error: "No session found" }, { status: 401 })
     }
 
-    const user = await getCurrentUser(sessionToken)
+    // Find valid session
+    const sessions = await sql`
+      SELECT s.*, u.* FROM sessions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.token = ${sessionToken} 
+      AND s.expires_at > NOW()
+    `
 
-    if (!user) {
-      // Clear invalid session cookie
-      const response = NextResponse.json({ user: null }, { status: 200 })
-      response.cookies.delete("session_token")
-      return response
+    if (sessions.length === 0) {
+      return NextResponse.json({ error: "Invalid session" }, { status: 401 })
     }
 
-    // Return user data (excluding sensitive fields)
+    const session = sessions[0]
+
     return NextResponse.json({
       user: {
-        id: user.id,
-        email: user.email,
-        notification_preferences: user.notification_preferences,
-        created_at: user.created_at,
-        last_login: user.last_login,
+        id: session.user_id,
+        email: session.email,
+        created_at: session.created_at,
       },
     })
   } catch (error) {
-    console.error("Failed to get current user:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("❌ Auth check error:", error)
+    return NextResponse.json({ error: "Authentication failed" }, { status: 500 })
   }
 }

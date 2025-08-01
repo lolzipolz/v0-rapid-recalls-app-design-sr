@@ -1,30 +1,55 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Shield, Plus, Package, Bell, AlertTriangle, CheckCircle, LogOut, Loader2, User } from "lucide-react"
+import { Plus, Package, AlertTriangle, CheckCircle, LogOut, Bell, Shield, TrendingUp } from "lucide-react"
 import AddProduct from "@/components/add-product"
-import { useRouter } from "next/navigation"
+import { RecallAlertCard } from "@/components/recall-alert-card"
+
+interface User {
+  id: string
+  email: string
+  created_at: string
+}
+
+interface Product {
+  id: string
+  name: string
+  brand?: string
+  model?: string
+  upc?: string
+  purchase_date?: string
+  purchase_price?: number
+  created_at: string
+}
+
+interface Recall {
+  id: string
+  title: string
+  description: string
+  severity: "low" | "medium" | "high" | "critical"
+  date_published: string
+  source: string
+  product_name: string
+  brand?: string
+  model?: string
+  upc?: string
+  status: "new" | "acknowledged" | "resolved"
+  matched_products: string[]
+}
 
 interface DashboardProps {
-  user: {
-    id: string
-    email: string
-    notification_preferences: any
-    created_at: string
-    last_login: string
-  }
+  user: User
 }
 
 export function Dashboard({ user }: DashboardProps) {
-  const [products, setProducts] = useState([])
-  const [recalls, setRecalls] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [products, setProducts] = useState<Product[]>([])
+  const [recalls, setRecalls] = useState<Recall[]>([])
   const [showAddProduct, setShowAddProduct] = useState(false)
-  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
@@ -33,13 +58,10 @@ export function Dashboard({ user }: DashboardProps) {
 
   const loadData = async () => {
     try {
-      setIsLoading(true)
-
       // Load products
       const productsResponse = await fetch("/api/products", {
         credentials: "include",
       })
-
       if (productsResponse.ok) {
         const productsData = await productsResponse.json()
         setProducts(productsData.products || [])
@@ -49,16 +71,14 @@ export function Dashboard({ user }: DashboardProps) {
       const recallsResponse = await fetch("/api/recalls", {
         credentials: "include",
       })
-
       if (recallsResponse.ok) {
         const recallsData = await recallsResponse.json()
         setRecalls(recallsData.recalls || [])
       }
     } catch (error) {
       console.error("Failed to load data:", error)
-      setError("Failed to load dashboard data")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
@@ -75,15 +95,18 @@ export function Dashboard({ user }: DashboardProps) {
   }
 
   const handleProductAdded = () => {
-    loadData()
     setShowAddProduct(false)
+    loadData()
   }
 
-  if (isLoading) {
+  const activeRecalls = recalls.filter((r) => r.status === "new")
+  const acknowledgedRecalls = recalls.filter((r) => r.status === "acknowledged")
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your dashboard...</p>
         </div>
       </div>
@@ -95,22 +118,19 @@ export function Dashboard({ user }: DashboardProps) {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-xl">
-                <Shield className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">RapidRecalls</h1>
-                <p className="text-sm text-gray-500">Dashboard</p>
-              </div>
-            </div>
-
+          <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <User className="h-4 w-4" />
-                <span>{user.email}</span>
+              <div className="flex items-center space-x-2">
+                <Shield className="h-8 w-8 text-blue-600" />
+                <h1 className="text-xl font-bold text-gray-900">RapidRecalls</h1>
               </div>
+              <Badge variant="secondary" className="bg-green-100 text-green-800">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                Live Monitoring
+              </Badge>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">Welcome, {user.email}</span>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
@@ -120,22 +140,15 @@ export function Dashboard({ user }: DashboardProps) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">{error}</AlertDescription>
-          </Alert>
-        )}
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Products Tracked</p>
-                  <p className="text-3xl font-bold text-gray-900">{products.length}</p>
+                  <p className="text-sm font-medium text-gray-600">Products Monitored</p>
+                  <p className="text-2xl font-bold text-gray-900">{products.length}</p>
                 </div>
                 <Package className="h-8 w-8 text-blue-600" />
               </div>
@@ -146,8 +159,8 @@ export function Dashboard({ user }: DashboardProps) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Active Recalls</p>
-                  <p className="text-3xl font-bold text-red-600">{recalls.length}</p>
+                  <p className="text-sm font-medium text-gray-600">Active Alerts</p>
+                  <p className="text-2xl font-bold text-red-600">{activeRecalls.length}</p>
                 </div>
                 <AlertTriangle className="h-8 w-8 text-red-600" />
               </div>
@@ -158,28 +171,53 @@ export function Dashboard({ user }: DashboardProps) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Monitoring Status</p>
-                  <p className="text-lg font-semibold text-green-600 flex items-center">
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Active
-                  </p>
+                  <p className="text-sm font-medium text-gray-600">Resolved</p>
+                  <p className="text-2xl font-bold text-green-600">{acknowledgedRecalls.length}</p>
                 </div>
-                <Bell className="h-8 w-8 text-green-600" />
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Protection Score</p>
+                  <p className="text-2xl font-bold text-blue-600">98%</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-blue-600" />
               </div>
             </CardContent>
           </Card>
         </div>
 
+        {/* Active Recalls */}
+        {activeRecalls.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Bell className="h-5 w-5 text-red-600 mr-2" />
+              Active Recall Alerts ({activeRecalls.length})
+            </h2>
+            <div className="space-y-4">
+              {activeRecalls.map((recall) => (
+                <RecallAlertCard key={recall.id} recall={recall} onUpdate={loadData} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Products Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Your Products */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>Your Products</CardTitle>
-                  <CardDescription>Products being monitored for recalls</CardDescription>
+                  <CardDescription>Products you're monitoring for recalls</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddProduct(true)}>
+                <Button onClick={() => setShowAddProduct(true)} size="sm">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Product
                 </Button>
@@ -197,23 +235,17 @@ export function Dashboard({ user }: DashboardProps) {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {products.map((product: any) => (
-                    <div key={product.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{product.name}</h4>
-                          {product.brand && <p className="text-sm text-gray-600">Brand: {product.brand}</p>}
-                          {product.model && <p className="text-sm text-gray-600">Model: {product.model}</p>}
-                          <p className="text-xs text-gray-500 mt-2">
-                            Added {new Date(product.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Badge variant="secondary">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Monitoring
-                        </Badge>
+                <div className="space-y-3">
+                  {products.map((product) => (
+                    <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{product.name}</h4>
+                        {product.brand && <p className="text-sm text-gray-600">{product.brand}</p>}
+                        {product.model && <p className="text-xs text-gray-500">Model: {product.model}</p>}
                       </div>
+                      <Badge variant="secondary" className="bg-green-100 text-green-800">
+                        Monitoring
+                      </Badge>
                     </div>
                   ))}
                 </div>
@@ -221,47 +253,55 @@ export function Dashboard({ user }: DashboardProps) {
             </CardContent>
           </Card>
 
-          {/* Recalls Section */}
+          {/* Recent Activity */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent Recalls</CardTitle>
-              <CardDescription>Latest product recalls that might affect you</CardDescription>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>Latest updates and system activity</CardDescription>
             </CardHeader>
             <CardContent>
-              {recalls.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No active recalls</h3>
-                  <p className="text-gray-600">Great news! None of your products have active recalls.</p>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">System monitoring active</p>
+                    <p className="text-xs text-gray-500">Checking for new recalls every hour</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {recalls.map((recall: any) => (
-                    <div key={recall.id} className="border border-red-200 rounded-lg p-4 bg-red-50">
-                      <div className="flex items-start space-x-3">
-                        <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
-                        <div className="flex-1">
-                          <h4 className="font-medium text-red-900">{recall.title}</h4>
-                          <p className="text-sm text-red-700 mt-1">{recall.description}</p>
-                          <div className="flex items-center justify-between mt-3">
-                            <Badge variant="destructive">{recall.agency}</Badge>
-                            <span className="text-xs text-red-600">
-                              {new Date(recall.recall_date).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+
+                {products.length > 0 && (
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Products synchronized</p>
+                      <p className="text-xs text-gray-500">{products.length} products being monitored</p>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                )}
+
+                {activeRecalls.length === 0 && products.length > 0 && (
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">All clear</p>
+                      <p className="text-xs text-gray-500">No active recalls for your products</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
-      </main>
+      </div>
 
       {/* Add Product Modal */}
-      {showAddProduct && <AddProduct onClose={() => setShowAddProduct(false)} onProductAdded={handleProductAdded} />}
+      {showAddProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <AddProduct onSuccess={handleProductAdded} onCancel={() => setShowAddProduct(false)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
