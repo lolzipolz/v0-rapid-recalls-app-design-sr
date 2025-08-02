@@ -6,12 +6,36 @@ import { sql } from "@/lib/database"
 
 export async function POST(request: NextRequest) {
   try {
+    // For debugging - log all request details
+    console.log("🔍 Cron request received:", {
+      method: request.method,
+      url: request.url,
+      headers: Object.fromEntries(request.headers.entries()),
+    })
+
     // Simple security check using URL parameter
     const { searchParams } = new URL(request.url)
     const secretParam = searchParams.get("secret")
+    const envSecret = process.env.CRON_SECRET
 
-    if (secretParam !== process.env.CRON_SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    console.log("🔐 Auth check:", {
+      secretParam: secretParam ? "provided" : "missing",
+      envSecret: envSecret ? "set" : "missing",
+      match: secretParam === envSecret,
+    })
+
+    if (secretParam !== envSecret) {
+      console.log("❌ Authentication failed")
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+          debug: {
+            hasSecret: !!secretParam,
+            hasEnvVar: !!envSecret,
+          },
+        },
+        { status: 401 },
+      )
     }
 
     console.log("🚀 Starting daily recall sync...")
@@ -78,13 +102,33 @@ export async function POST(request: NextRequest) {
 
 // Also support GET for manual testing
 export async function GET(request: NextRequest) {
+  console.log("🔍 GET request received for cron endpoint")
+
   const { searchParams } = new URL(request.url)
   const secret = searchParams.get("secret")
+  const envSecret = process.env.CRON_SECRET
 
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  console.log("🔐 GET Auth check:", {
+    secretParam: secret ? "provided" : "missing",
+    envSecret: envSecret ? "set" : "missing",
+    match: secret === envSecret,
+  })
+
+  if (secret !== envSecret) {
+    console.log("❌ GET Authentication failed")
+    return NextResponse.json(
+      {
+        error: "Unauthorized",
+        debug: {
+          hasSecret: !!secret,
+          hasEnvVar: !!envSecret,
+        },
+      },
+      { status: 401 },
+    )
   }
 
   // Convert to POST request for testing
+  console.log("✅ GET auth passed, converting to POST")
   return POST(request)
 }
