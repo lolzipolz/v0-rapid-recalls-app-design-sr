@@ -88,4 +88,4 @@ COMMENT ON COLUMN recalls.product_keywords IS 'Array of keywords extracted from 
 COMMENT ON COLUMN recalls.brand_keywords IS 'Array of brand names extracted for matching';
 COMMENT ON COLUMN recalls.upc_codes IS 'Array of UPC codes found in the recall';
 COMMENT ON COLUMN matched_recalls.match_type IS 'Type of match: upc_exact, brand_fuzzy, title_fuzzy';
-COMMENT ON COLUMN matched_recalls.confidence_score IS 'Confidence score from 0.0 to 1.0 for the match'; 
+COMMENT ON COLUMN matched_recalls.confidence_score IS 'Confidence score from 0.0 to 1.0 for the match';

@@ -6,29 +6,28 @@ import { sql } from "@/lib/database"
 
 export async function POST(request: NextRequest) {
   try {
-    // For Vercel cron jobs, we need to use a different approach
-    // Vercel cron jobs don't send special headers, so we'll use a combination of:
-    // 1. Check if it's a Vercel cron job (no special headers, but we can detect by user agent)
-    // 2. Allow manual testing with secret parameter
-    // 3. Allow custom authorization header for external cron services
-    
+    // Vercel cron jobs include a special header for authentication
     const authHeader = request.headers.get("authorization")
-    const userAgent = request.headers.get("user-agent") || ""
+    const cronSecret = request.headers.get("x-vercel-cron-secret")
     const { searchParams } = new URL(request.url)
     const secretParam = searchParams.get("secret")
-    
+
     // Check if this is a legitimate request
-    const isVercelCron = userAgent.includes("Vercel") || userAgent.includes("vercel")
+    // 1. Vercel cron jobs send x-vercel-cron-secret header
+    // 2. Manual testing with secret parameter
+    // 3. Custom authorization header for external services
+    const isVercelCron = cronSecret === process.env.CRON_SECRET
     const isCustomAuth = authHeader === `Bearer ${process.env.CRON_SECRET}`
     const isSecretParam = secretParam === process.env.CRON_SECRET
-    
+
     if (!isVercelCron && !isCustomAuth && !isSecretParam) {
       console.log("❌ Unauthorized cron request:", {
-        userAgent,
+        hasCronSecret: !!cronSecret,
         hasCustomAuth: !!authHeader,
         hasSecretParam: !!secretParam,
-        authValue: authHeader?.substring(0, 20) + "...",
-        secretValue: secretParam?.substring(0, 10) + "..."
+        cronSecretMatch: cronSecret === process.env.CRON_SECRET,
+        authHeaderMatch: authHeader === `Bearer ${process.env.CRON_SECRET}`,
+        secretParamMatch: secretParam === process.env.CRON_SECRET,
       })
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -104,6 +103,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Convert to POST request
+  // Convert to POST request for testing
   return POST(request)
 }

@@ -90,4 +90,4 @@ async function main() {
   await testTestEndpoint()
 }
 
-main().catch(console.error) 
+main().catch(console.error)

@@ -106,4 +106,4 @@ async function main() {
   await testRecallIngestion()
 }
 
-main().catch(console.error) 
+main().catch(console.error)

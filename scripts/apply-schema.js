@@ -84,4 +84,4 @@ async function applySchema() {
   }
 }
 
-applySchema().catch(console.error) 
+applySchema().catch(console.error)

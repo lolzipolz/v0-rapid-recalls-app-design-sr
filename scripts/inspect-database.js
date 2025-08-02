@@ -156,4 +156,4 @@ async function main() {
   console.log("\n✅ Database inspection completed!")
 }
 
-main().catch(console.error) 
+main().catch(console.error)

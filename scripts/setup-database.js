@@ -82,4 +82,4 @@ async function setupDatabase() {
   }
 }
 
-setupDatabase().catch(console.error) 
+setupDatabase().catch(console.error)

@@ -4,16 +4,15 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "db:setup": "npm run migrate",
+    "db:apply-schema": "node scripts/apply-schema.js",
+    "db:inspect": "node scripts/inspect-database.js",
+    "db:setup": "node scripts/setup-database.js",
     "dev": "next dev",
     "lint": "next lint",
     "migrate": "node scripts/run-migrations.js",
     "start": "next start",
     "test:cron": "node scripts/test-cron.js",
-    "test:recalls": "node scripts/test-recall-apis.js",
-    "db:setup": "node scripts/setup-database.js",
-    "db:inspect": "node scripts/inspect-database.js",
-    "db:apply-schema": "node scripts/apply-schema.js"
+    "test:recalls": "node scripts/test-recall-apis.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "latest",
