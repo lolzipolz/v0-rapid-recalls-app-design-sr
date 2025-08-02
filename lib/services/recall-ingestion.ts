@@ -78,7 +78,7 @@ export class RecallIngestionService {
           source: "FDA",
           title: recall.product_description || "FDA Food Recall",
           description: recall.reason_for_recall || "",
-          date_published: new Date(recall.report_date || Date.now()),
+          date_published: this.safeDate(recall.report_date),
           severity: this.mapFDASeverity(recall.classification),
           product_keywords: this.extractProductKeywords(recall.product_description || ""),
           brand_keywords: this.extractBrandKeywords(recall.recalling_firm || ""),
@@ -117,7 +117,7 @@ export class RecallIngestionService {
           source: "CPSC",
           title: recall.ProductName || "CPSC Product Recall",
           description: recall.Description || recall.Hazard || "",
-          date_published: new Date(recall.RecallDate || Date.now()),
+          date_published: this.safeDate(recall.RecallDate),
           severity: this.mapCPSCSeverity(recall.Hazard),
           product_keywords: this.extractProductKeywords(recall.ProductName || ""),
           brand_keywords: this.extractBrandKeywords(recall.Manufacturer || ""),
@@ -157,7 +157,7 @@ export class RecallIngestionService {
           source: "NHTSA",
           title: `${recall.Make} ${recall.Model} Recall`,
           description: recall.Summary || recall.Defect || "",
-          date_published: new Date(recall.ReportReceivedDate || Date.now()),
+          date_published: this.safeDate(recall.ReportReceivedDate),
           severity: this.mapNHTSASeverity(recall.DefectSeverity),
           product_keywords: this.extractProductKeywords(`${recall.Make} ${recall.Model} ${recall.Component}`),
           brand_keywords: this.extractBrandKeywords(recall.Make || ""),
@@ -215,6 +215,11 @@ export class RecallIngestionService {
         raw_data = EXCLUDED.raw_data,
         updated_at = NOW()
     `
+  }
+
+  private safeDate(input: string | undefined | null): Date {
+    const parsed = new Date(input ?? "")
+    return isNaN(parsed.getTime()) ? new Date() : parsed
   }
 
   private mapFDASeverity(classification: string): string {
