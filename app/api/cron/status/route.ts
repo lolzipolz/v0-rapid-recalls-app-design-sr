@@ -6,55 +6,46 @@ export async function GET() {
     // Check database connectivity
     const dbCheck = await sql`SELECT NOW() as current_time`
 
-    // Get recall counts by source
-    const recallCounts = await sql`
+    // Get recall statistics
+    const recallStats = await sql`
       SELECT 
         source,
         COUNT(*) as count,
-        MAX(created_at) as last_sync
+        MAX(date_published) as latest_recall,
+        MAX(updated_at) as last_updated
       FROM recalls 
       GROUP BY source
-      ORDER BY source
     `
 
-    // Get user and product counts
+    // Get user statistics
     const userStats = await sql`
       SELECT 
-        (SELECT COUNT(*) FROM users) as total_users,
-        (SELECT COUNT(*) FROM products) as total_products,
-        (SELECT COUNT(*) FROM recall_matches WHERE status = 'pending') as pending_matches
+        COUNT(DISTINCT user_id) as total_users,
+        COUNT(*) as total_products
+      FROM products
     `
 
     // Get recent cron activity (if we had a cron_logs table)
-    const recentActivity = await sql`
-      SELECT 
-        COUNT(*) as recalls_last_24h
-      FROM recalls 
-      WHERE created_at >= NOW() - INTERVAL '24 hours'
-    `
+    const cronStatus = {
+      database_connected: true,
+      database_time: dbCheck[0].current_time,
+      recall_sources: recallStats,
+      user_stats: userStats[0],
+      last_check: new Date().toISOString(),
+    }
 
     return NextResponse.json({
       status: "healthy",
-      timestamp: new Date().toISOString(),
-      database: {
-        connected: true,
-        current_time: dbCheck[0].current_time,
-      },
-      recalls: recallCounts,
-      stats: userStats[0],
-      recent_activity: recentActivity[0],
-      cron_config: {
-        schedule: "0 6 * * *", // Daily at 6 AM UTC
-        next_run: "Check Vercel dashboard for next scheduled run",
-      },
+      ...cronStatus,
     })
   } catch (error) {
-    console.error("Status check failed:", error)
+    console.error("Cron status check failed:", error)
+
     return NextResponse.json(
       {
-        status: "error",
-        timestamp: new Date().toISOString(),
+        status: "unhealthy",
         error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )

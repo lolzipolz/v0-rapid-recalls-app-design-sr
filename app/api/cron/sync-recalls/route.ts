@@ -18,20 +18,26 @@ export async function POST(request: NextRequest) {
     const secretParam = searchParams.get("secret")
     const envSecret = process.env.CRON_SECRET
 
-    console.log("🔐 Auth check:", {
-      secretParam: secretParam ? "provided" : "missing",
-      envSecret: envSecret ? "set" : "missing",
+    console.log("🔐 Auth check detailed:", {
+      secretParam: secretParam,
+      secretParamLength: secretParam?.length,
+      envSecret: envSecret,
+      envSecretLength: envSecret?.length,
       match: secretParam === envSecret,
+      secretParamType: typeof secretParam,
+      envSecretType: typeof envSecret,
     })
 
     if (secretParam !== envSecret) {
-      console.log("❌ Authentication failed")
+      console.log("❌ Authentication failed - values don't match")
       return NextResponse.json(
         {
           error: "Unauthorized",
           debug: {
             hasSecret: !!secretParam,
             hasEnvVar: !!envSecret,
+            secretLength: secretParam?.length,
+            envLength: envSecret?.length,
           },
         },
         { status: 401 },
@@ -108,20 +114,26 @@ export async function GET(request: NextRequest) {
   const secret = searchParams.get("secret")
   const envSecret = process.env.CRON_SECRET
 
-  console.log("🔐 GET Auth check:", {
-    secretParam: secret ? "provided" : "missing",
-    envSecret: envSecret ? "set" : "missing",
+  console.log("🔐 GET Auth check detailed:", {
+    secretParam: secret,
+    secretParamLength: secret?.length,
+    envSecret: envSecret,
+    envSecretLength: envSecret?.length,
     match: secret === envSecret,
+    secretParamType: typeof secret,
+    envSecretType: typeof envSecret,
   })
 
   if (secret !== envSecret) {
-    console.log("❌ GET Authentication failed")
+    console.log("❌ GET Authentication failed - values don't match")
     return NextResponse.json(
       {
         error: "Unauthorized",
         debug: {
           hasSecret: !!secret,
           hasEnvVar: !!envSecret,
+          secretLength: secret?.length,
+          envLength: envSecret?.length,
         },
       },
       { status: 401 },
