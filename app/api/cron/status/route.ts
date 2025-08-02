@@ -3,48 +3,49 @@ import { sql } from "@/lib/database"
 
 export async function GET() {
   try {
-    // Check last recall sync
-    const lastRecall = await sql`
-      SELECT created_at, updated_at, agency 
-      FROM recalls 
-      ORDER BY updated_at DESC 
-      LIMIT 1
-    `
+    // Check database connectivity
+    const dbCheck = await sql`SELECT NOW() as current_time`
 
-    // Check total recalls by agency
-    const recallStats = await sql`
+    // Get recall counts by source
+    const recallCounts = await sql`
       SELECT 
-        agency,
-        COUNT(*) as total,
-        MAX(updated_at) as last_updated
+        source,
+        COUNT(*) as count,
+        MAX(created_at) as last_sync
       FROM recalls 
-      GROUP BY agency
-      ORDER BY total DESC
+      GROUP BY source
+      ORDER BY source
     `
 
-    // Check users with products
+    // Get user and product counts
     const userStats = await sql`
-      SELECT COUNT(DISTINCT user_id) as users_with_products
-      FROM products
+      SELECT 
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(*) FROM products) as total_products,
+        (SELECT COUNT(*) FROM recall_matches WHERE status = 'pending') as pending_matches
     `
 
-    // Check recent user recalls (matches)
-    const recentMatches = await sql`
-      SELECT COUNT(*) as recent_matches
-      FROM user_recalls
+    // Get recent cron activity (if we had a cron_logs table)
+    const recentActivity = await sql`
+      SELECT 
+        COUNT(*) as recalls_last_24h
+      FROM recalls 
       WHERE created_at >= NOW() - INTERVAL '24 hours'
     `
 
     return NextResponse.json({
       status: "healthy",
       timestamp: new Date().toISOString(),
-      lastRecallUpdate: lastRecall[0]?.updated_at || null,
-      recallStats: recallStats,
-      usersWithProducts: userStats[0]?.users_with_products || 0,
-      recentMatches: recentMatches[0]?.recent_matches || 0,
-      environment: {
-        hasCronSecret: !!process.env.CRON_SECRET,
-        nodeEnv: process.env.NODE_ENV,
+      database: {
+        connected: true,
+        current_time: dbCheck[0].current_time,
+      },
+      recalls: recallCounts,
+      stats: userStats[0],
+      recent_activity: recentActivity[0],
+      cron_config: {
+        schedule: "0 6 * * *", // Daily at 6 AM UTC
+        next_run: "Check Vercel dashboard for next scheduled run",
       },
     })
   } catch (error) {
@@ -52,8 +53,8 @@ export async function GET() {
     return NextResponse.json(
       {
         status: "error",
-        error: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )

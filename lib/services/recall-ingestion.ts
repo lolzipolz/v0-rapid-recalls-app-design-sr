@@ -1,5 +1,18 @@
-import { sql } from "../database"
-import type { Recall } from "../database"
+import { sql } from "@/lib/database"
+
+interface RecallData {
+  external_id: string
+  title: string
+  description: string
+  date_published: string
+  url: string
+  product_keywords: string[]
+  brand_keywords: string[]
+  upc_codes: string[]
+  source: string
+  severity?: string
+  product_type?: string
+}
 
 export class RecallIngestionService {
   private static instance: RecallIngestionService
@@ -11,400 +24,245 @@ export class RecallIngestionService {
     return RecallIngestionService.instance
   }
 
-  async syncAllRecalls(): Promise<SyncResult> {
-    console.log("Starting recall sync...")
+  async syncAllRecalls() {
+    console.log("🔄 Starting recall sync from all sources...")
 
-    const results: SyncResult = {
-      fda: { success: 0, errors: 0 },
-      usda: { success: 0, errors: 0 },
-      cpsc: { success: 0, errors: 0 },
-      nhtsa: { success: 0, errors: 0 },
+    const results = {
+      fda: { success: false, count: 0, error: null as string | null },
+      cpsc: { success: false, count: 0, error: null as string | null },
+      usda: { success: false, count: 0, error: null as string | null },
     }
 
+    // Sync FDA recalls
     try {
-      // Run all syncs in parallel
-      const [fdaResult, usdaResult, cpscResult, nhtsaResult] = await Promise.allSettled([
-        this.syncFDARecalls(),
-        this.syncUSDARecalls(),
-        this.syncCPSCRecalls(),
-        this.syncNHTSARecalls(),
-      ])
-
-      // Process results
-      if (fdaResult.status === "fulfilled") results.fda = fdaResult.value
-      else {
-        results.fda.errors = 1
-        console.error("FDA sync failed:", fdaResult.reason)
-      }
-
-      if (usdaResult.status === "fulfilled") results.usda = usdaResult.value
-      else {
-        results.usda.errors = 1
-        console.error("USDA sync failed:", usdaResult.reason)
-      }
-
-      if (cpscResult.status === "fulfilled") results.cpsc = cpscResult.value
-      else {
-        results.cpsc.errors = 1
-        console.error("CPSC sync failed:", cpscResult.reason)
-      }
-
-      if (nhtsaResult.status === "fulfilled") results.nhtsa = nhtsaResult.value
-      else {
-        results.nhtsa.errors = 1
-        console.error("NHTSA sync failed:", nhtsaResult.reason)
-      }
-
-      console.log("Recall sync completed:", results)
-      return results
+      const fdaCount = await this.syncFDARecalls()
+      results.fda = { success: true, count: fdaCount, error: null }
     } catch (error) {
-      console.error("Recall sync failed:", error)
+      results.fda.error = error instanceof Error ? error.message : "Unknown error"
+      console.error("FDA sync failed:", error)
+    }
+
+    // Sync CPSC recalls
+    try {
+      const cpscCount = await this.syncCPSCRecalls()
+      results.cpsc = { success: true, count: cpscCount, error: null }
+    } catch (error) {
+      results.cpsc.error = error instanceof Error ? error.message : "Unknown error"
+      console.error("CPSC sync failed:", error)
+    }
+
+    // Sync USDA recalls
+    try {
+      const usdaCount = await this.syncUSDARecalls()
+      results.usda = { success: true, count: usdaCount, error: null }
+    } catch (error) {
+      results.usda.error = error instanceof Error ? error.message : "Unknown error"
+      console.error("USDA sync failed:", error)
+    }
+
+    return results
+  }
+
+  private async syncFDARecalls(): Promise<number> {
+    console.log("📡 Syncing FDA recalls...")
+
+    // FDA API endpoint for food recalls
+    const fdaUrl = "https://api.fda.gov/food/enforcement.json?limit=100"
+
+    try {
+      const response = await fetch(fdaUrl)
+      if (!response.ok) {
+        throw new Error(`FDA API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+      const recalls = data.results || []
+
+      let processedCount = 0
+      for (const recall of recalls) {
+        try {
+          await this.upsertRecall({
+            external_id: recall.recall_number || `fda-${recall.event_id}`,
+            title: recall.product_description || "FDA Food Recall",
+            description: recall.reason_for_recall || "",
+            date_published: recall.report_date || new Date().toISOString(),
+            url: `https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts`,
+            product_keywords: this.extractProductKeywords(recall.product_description || ""),
+            brand_keywords: this.extractBrandKeywords(recall.recalling_firm || ""),
+            upc_codes: [],
+            source: "FDA",
+            severity: recall.classification,
+            product_type: "food",
+          })
+          processedCount++
+        } catch (error) {
+          console.error(`Failed to process FDA recall ${recall.recall_number}:`, error)
+        }
+      }
+
+      console.log(`✅ Processed ${processedCount} FDA recalls`)
+      return processedCount
+    } catch (error) {
+      console.error("FDA API error:", error)
       throw error
     }
   }
 
-  private async syncFDARecalls(): Promise<AgencyResult> {
-    const result: AgencyResult = { success: 0, errors: 0 }
+  private async syncCPSCRecalls(): Promise<number> {
+    console.log("📡 Syncing CPSC recalls...")
+
+    // CPSC API endpoint
+    const cpscUrl = "https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallDateStart=2024-01-01"
 
     try {
-      // FDA Food Recalls
-      const foodResponse = await fetch("https://api.fda.gov/food/enforcement.json?limit=100")
-      const foodData = await foodResponse.json()
+      const response = await fetch(cpscUrl)
+      if (!response.ok) {
+        throw new Error(`CPSC API error: ${response.status}`)
+      }
 
-      for (const recall of foodData.results || []) {
+      const recalls = await response.json()
+
+      let processedCount = 0
+      for (const recall of recalls) {
         try {
           await this.upsertRecall({
-            agency: "FDA",
-            recall_number: recall.recall_number || `FDA-FOOD-${Date.now()}-${Math.random()}`,
-            title: recall.product_description || "FDA Food Recall",
-            description: recall.reason_for_recall,
-            recall_date: this.parseDate(recall.recall_initiation_date),
-            link: `https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts`,
-            severity: this.mapFDASeverity(recall.classification),
-            product_keywords: this.extractKeywords(recall.product_description),
-            upcs: this.extractUPCs(recall.product_description),
-            brands: this.extractBrands(recall.product_description),
-            raw_data: recall,
+            external_id: recall.RecallNumber || `cpsc-${recall.RecallID}`,
+            title: recall.ProductName || "CPSC Product Recall",
+            description: recall.Description || "",
+            date_published: recall.RecallDate || new Date().toISOString(),
+            url: recall.URL || "https://www.cpsc.gov/Recalls",
+            product_keywords: this.extractProductKeywords(recall.ProductName || ""),
+            brand_keywords: this.extractBrandKeywords(recall.Manufacturer || ""),
+            upc_codes: recall.UPCs ? [recall.UPCs] : [],
+            source: "CPSC",
+            severity: recall.HazardLevel,
+            product_type: "consumer_product",
           })
-          result.success++
+          processedCount++
         } catch (error) {
-          result.errors++
-          console.error("Failed to process FDA food recall:", error)
+          console.error(`Failed to process CPSC recall ${recall.RecallNumber}:`, error)
         }
       }
 
-      // FDA Drug Recalls
-      const drugResponse = await fetch("https://api.fda.gov/drug/enforcement.json?limit=50")
-      const drugData = await drugResponse.json()
-
-      for (const recall of drugData.results || []) {
-        try {
-          await this.upsertRecall({
-            agency: "FDA",
-            recall_number: recall.recall_number || `FDA-DRUG-${Date.now()}-${Math.random()}`,
-            title: recall.product_description || "FDA Drug Recall",
-            description: recall.reason_for_recall,
-            recall_date: this.parseDate(recall.recall_initiation_date),
-            link: `https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts`,
-            severity: this.mapFDASeverity(recall.classification),
-            product_keywords: this.extractKeywords(recall.product_description),
-            upcs: this.extractUPCs(recall.product_description),
-            brands: this.extractBrands(recall.product_description),
-            raw_data: recall,
-          })
-          result.success++
-        } catch (error) {
-          result.errors++
-          console.error("Failed to process FDA drug recall:", error)
-        }
-      }
+      console.log(`✅ Processed ${processedCount} CPSC recalls`)
+      return processedCount
     } catch (error) {
-      console.error("FDA recall sync failed:", error)
-      result.errors++
+      console.error("CPSC API error:", error)
+      throw error
     }
-
-    return result
   }
 
-  private async syncUSDARecalls(): Promise<AgencyResult> {
-    const result: AgencyResult = { success: 0, errors: 0 }
+  private async syncUSDARecalls(): Promise<number> {
+    console.log("📡 Syncing USDA recalls...")
+
+    // USDA FSIS API endpoint
+    const usdaUrl = "https://www.fsis.usda.gov/fsis/api/recall"
 
     try {
-      const response = await fetch("https://www.fsis.usda.gov/fsis/api/recall", {
-        headers: {
-          "User-Agent": "RapidRecalls/1.0 (contact@rapidrecalls.com)",
-        },
-      })
-
+      const response = await fetch(usdaUrl)
       if (!response.ok) {
-        throw new Error(`USDA API returned ${response.status}`)
+        throw new Error(`USDA API error: ${response.status}`)
       }
 
       const data = await response.json()
+      const recalls = data.results || []
 
-      for (const recall of data || []) {
+      let processedCount = 0
+      for (const recall of recalls) {
         try {
           await this.upsertRecall({
-            agency: "USDA",
-            recall_number: recall.recallNumber || `USDA-${Date.now()}-${Math.random()}`,
-            title: recall.productName || "USDA Recall",
-            description: recall.problemDescription || recall.healthHazard,
-            recall_date: this.parseDate(recall.recallDate),
-            link: recall.pressRelease || "https://www.fsis.usda.gov/recalls",
-            severity: "high", // USDA recalls are typically serious
-            product_keywords: this.extractKeywords(recall.productName),
-            upcs: this.extractUPCs(recall.productName),
-            brands: this.extractBrands(recall.productName),
-            raw_data: recall,
+            external_id: recall.recall_case_number || `usda-${recall.id}`,
+            title: recall.product_name || "USDA Food Recall",
+            description: recall.summary || "",
+            date_published: recall.recall_notification_date || new Date().toISOString(),
+            url: recall.press_release_url || "https://www.fsis.usda.gov/recalls",
+            product_keywords: this.extractProductKeywords(recall.product_name || ""),
+            brand_keywords: this.extractBrandKeywords(recall.establishment_name || ""),
+            upc_codes: [],
+            source: "USDA",
+            severity: recall.health_hazard_evaluation,
+            product_type: "food",
           })
-          result.success++
+          processedCount++
         } catch (error) {
-          result.errors++
-          console.error("Failed to process USDA recall:", error)
+          console.error(`Failed to process USDA recall ${recall.recall_case_number}:`, error)
         }
       }
+
+      console.log(`✅ Processed ${processedCount} USDA recalls`)
+      return processedCount
     } catch (error) {
-      console.error("USDA recall sync failed:", error)
-      result.errors++
+      console.error("USDA API error:", error)
+      throw error
     }
-
-    return result
   }
 
-  private async syncNHTSARecalls(): Promise<AgencyResult> {
-    const result: AgencyResult = { success: 0, errors: 0 }
-
-    try {
-      // Get recent vehicle recalls
-      const currentYear = new Date().getFullYear()
-      const response = await fetch(`https://api.nhtsa.gov/recalls/recallsByVehicle?modelYear=${currentYear}`)
-
-      if (!response.ok) {
-        throw new Error(`NHTSA API returned ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      for (const recall of data.results?.slice(0, 50) || []) {
-        try {
-          await this.upsertRecall({
-            agency: "NHTSA",
-            recall_number: recall.NHTSACampaignNumber || `NHTSA-${Date.now()}-${Math.random()}`,
-            title: `${recall.Make} ${recall.Model} ${recall.ModelYear} - ${recall.Component}`,
-            description: recall.Summary || recall.Defect,
-            recall_date: this.parseDate(recall.ReportReceivedDate),
-            link: `https://www.nhtsa.gov/recalls?vin=${recall.NHTSACampaignNumber}`,
-            severity: recall.PotentialNumberOfUnitsAffected > 100000 ? "high" : "medium",
-            product_keywords: this.extractKeywords(`${recall.Make} ${recall.Model} ${recall.Component}`),
-            upcs: [],
-            brands: [recall.Make].filter(Boolean),
-            raw_data: recall,
-          })
-          result.success++
-        } catch (error) {
-          result.errors++
-          console.error("Failed to process NHTSA recall:", error)
-        }
-      }
-    } catch (error) {
-      console.error("NHTSA recall sync failed:", error)
-      result.errors++
-    }
-
-    return result
-  }
-
-  private async syncCPSCRecalls(): Promise<AgencyResult> {
-    const result: AgencyResult = { success: 0, errors: 0 }
-
-    try {
-      // CPSC doesn't have a public API, so we'll use their RSS feed
-      const response = await fetch("https://www.cpsc.gov/Newsroom/News-Releases/RSS")
-      const rssText = await response.text()
-
-      // Simple RSS parsing (in production, use a proper XML parser)
-      const items = this.parseRSSItems(rssText)
-
-      for (const item of items.slice(0, 20)) {
-        if (item.title.toLowerCase().includes("recall")) {
-          try {
-            await this.upsertRecall({
-              agency: "CPSC",
-              recall_number: `CPSC-${this.generateId(item.title)}`,
-              title: item.title,
-              description: item.description,
-              recall_date: this.parseDate(item.pubDate),
-              link: item.link,
-              severity: this.determineCPSCSeverity(item.title, item.description),
-              product_keywords: this.extractKeywords(item.title),
-              upcs: this.extractUPCs(item.description),
-              brands: this.extractBrands(item.title),
-              raw_data: item,
-            })
-            result.success++
-          } catch (error) {
-            result.errors++
-            console.error("Failed to process CPSC recall:", error)
-          }
-        }
-      }
-    } catch (error) {
-      console.error("CPSC recall sync failed:", error)
-      result.errors++
-    }
-
-    return result
-  }
-
-  private parseRSSItems(rssText: string): RSSItem[] {
-    const items: RSSItem[] = []
-    const itemRegex = /<item>(.*?)<\/item>/gs
-    let match
-
-    while ((match = itemRegex.exec(rssText)) !== null) {
-      const itemContent = match[1]
-      const title = this.extractRSSField(itemContent, "title")
-      const description = this.extractRSSField(itemContent, "description")
-      const link = this.extractRSSField(itemContent, "link")
-      const pubDate = this.extractRSSField(itemContent, "pubDate")
-
-      if (title && description) {
-        items.push({ title, description, link, pubDate })
-      }
-    }
-
-    return items
-  }
-
-  private extractRSSField(content: string, field: string): string {
-    const regex = new RegExp(`<${field}[^>]*>(.*?)<\/${field}>`, "s")
-    const match = content.match(regex)
-    return match ? match[1].replace(/<!\[CDATA\[(.*?)\]\]>/s, "$1").trim() : ""
-  }
-
-  private generateId(text: string): string {
-    return (
-      text
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "")
-        .substring(0, 10) + Date.now()
-    )
-  }
-
-  private determineCPSCSeverity(title: string, description: string): "low" | "medium" | "high" {
-    const text = (title + " " + description).toLowerCase()
-    if (text.includes("death") || text.includes("serious injury") || text.includes("choking")) {
-      return "high"
-    }
-    if (text.includes("injury") || text.includes("burn") || text.includes("cut")) {
-      return "medium"
-    }
-    return "low"
-  }
-
-  private async upsertRecall(recallData: Omit<Recall, "id" | "created_at" | "updated_at">): Promise<void> {
+  private async upsertRecall(recallData: RecallData): Promise<void> {
     try {
       await sql`
         INSERT INTO recalls (
-          agency, external_id, title, description, recall_date, 
-          link, severity, product_keywords, brand_keywords, upc_codes
+          external_id, title, description, date_published, url,
+          product_keywords, brand_keywords, upc_codes, source,
+          severity, product_type, created_at, updated_at
         ) VALUES (
-          ${recallData.agency}, ${recallData.recall_number}, ${recallData.title},
-          ${recallData.description}, ${recallData.recall_date}, ${recallData.link},
-          ${recallData.severity}, ${recallData.product_keywords}, ${recallData.brands},
-          ${recallData.upcs}
+          ${recallData.external_id},
+          ${recallData.title},
+          ${recallData.description},
+          ${recallData.date_published},
+          ${recallData.url},
+          ${JSON.stringify(recallData.product_keywords)},
+          ${JSON.stringify(recallData.brand_keywords)},
+          ${JSON.stringify(recallData.upc_codes)},
+          ${recallData.source},
+          ${recallData.severity || null},
+          ${recallData.product_type || null},
+          NOW(),
+          NOW()
         )
         ON CONFLICT (external_id) 
         DO UPDATE SET
           title = EXCLUDED.title,
           description = EXCLUDED.description,
-          severity = EXCLUDED.severity,
+          date_published = EXCLUDED.date_published,
+          url = EXCLUDED.url,
           product_keywords = EXCLUDED.product_keywords,
           brand_keywords = EXCLUDED.brand_keywords,
           upc_codes = EXCLUDED.upc_codes,
+          severity = EXCLUDED.severity,
+          product_type = EXCLUDED.product_type,
           updated_at = NOW()
       `
     } catch (error) {
-      console.error("Failed to upsert recall:", error)
+      console.error("Database upsert error:", error)
       throw error
     }
   }
 
-  private parseDate(dateString: string): string {
-    if (!dateString) return new Date().toISOString().split("T")[0]
-
-    try {
-      const date = new Date(dateString)
-      return date.toISOString().split("T")[0]
-    } catch {
-      return new Date().toISOString().split("T")[0]
-    }
-  }
-
-  private extractKeywords(text: string): string[] {
+  private extractProductKeywords(text: string): string[] {
     if (!text) return []
 
-    return text
+    // Extract meaningful product keywords
+    const keywords = text
       .toLowerCase()
       .replace(/[^\w\s]/g, " ")
       .split(/\s+/)
       .filter((word) => word.length > 2)
-      .slice(0, 20) // Limit keywords
+      .filter((word) => !["the", "and", "for", "with", "from", "that", "this"].includes(word))
+
+    return [...new Set(keywords)]
   }
 
-  private extractUPCs(text: string): string[] {
+  private extractBrandKeywords(text: string): string[] {
     if (!text) return []
 
-    const upcPattern = /\b\d{12,14}\b/g
-    return text.match(upcPattern) || []
+    // Extract brand names and company keywords
+    const keywords = text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter((word) => word.length > 1)
+      .filter((word) => !["inc", "llc", "corp", "company", "co", "ltd"].includes(word))
+
+    return [...new Set(keywords)]
   }
-
-  private extractBrands(text: string): string[] {
-    if (!text) return []
-
-    // Simple brand extraction - could be enhanced with ML
-    const brandPatterns = [/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g]
-
-    const brands: string[] = []
-    for (const pattern of brandPatterns) {
-      const matches = text.match(pattern)
-      if (matches) {
-        brands.push(...matches.slice(0, 5)) // Limit brands
-      }
-    }
-
-    return [...new Set(brands)] // Remove duplicates
-  }
-
-  private mapFDASeverity(classification: string): "low" | "medium" | "high" {
-    switch (classification) {
-      case "Class I":
-        return "high"
-      case "Class II":
-        return "medium"
-      case "Class III":
-        return "low"
-      default:
-        return "medium"
-    }
-  }
-}
-
-interface SyncResult {
-  fda: AgencyResult
-  usda: AgencyResult
-  cpsc: AgencyResult
-  nhtsa: AgencyResult
-}
-
-interface AgencyResult {
-  success: number
-  errors: number
-}
-
-interface RSSItem {
-  title: string
-  description: string
-  link: string
-  pubDate: string
 }

@@ -6,29 +6,11 @@ import { sql } from "@/lib/database"
 
 export async function POST(request: NextRequest) {
   try {
-    // Vercel cron jobs include a special header for authentication
-    const authHeader = request.headers.get("authorization")
-    const cronSecret = request.headers.get("x-vercel-cron-secret")
+    // Simple security check using URL parameter
     const { searchParams } = new URL(request.url)
     const secretParam = searchParams.get("secret")
 
-    // Check if this is a legitimate request
-    // 1. Vercel cron jobs send x-vercel-cron-secret header
-    // 2. Manual testing with secret parameter
-    // 3. Custom authorization header for external services
-    const isVercelCron = cronSecret === process.env.CRON_SECRET
-    const isCustomAuth = authHeader === `Bearer ${process.env.CRON_SECRET}`
-    const isSecretParam = secretParam === process.env.CRON_SECRET
-
-    if (!isVercelCron && !isCustomAuth && !isSecretParam) {
-      console.log("❌ Unauthorized cron request:", {
-        hasCronSecret: !!cronSecret,
-        hasCustomAuth: !!authHeader,
-        hasSecretParam: !!secretParam,
-        cronSecretMatch: cronSecret === process.env.CRON_SECRET,
-        authHeaderMatch: authHeader === `Bearer ${process.env.CRON_SECRET}`,
-        secretParamMatch: secretParam === process.env.CRON_SECRET,
-      })
+    if (secretParam !== process.env.CRON_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
