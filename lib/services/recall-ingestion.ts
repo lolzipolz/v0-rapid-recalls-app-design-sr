@@ -199,10 +199,10 @@ export class RecallIngestionService {
         ${recallData.description},
         ${recallData.date_published},
         ${recallData.severity},
-        ${JSON.stringify(recallData.product_keywords)},
-        ${JSON.stringify(recallData.brand_keywords)},
-        ${JSON.stringify(recallData.upc_codes)},
-        ${JSON.stringify(recallData.raw_data)}
+        ${recallData.product_keywords},
+        ${recallData.brand_keywords},
+        ${recallData.upc_codes},
+        ${recallData.raw_data}
       )
       ON CONFLICT (external_id) 
       DO UPDATE SET
