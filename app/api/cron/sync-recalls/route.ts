@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { RecallIngestionService } from "@/lib/services/recall-ingestion"
+import { MatchingEngine } from "@/lib/services/matching-engine"
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +26,10 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
     console.log(`⏱️ Sync completed in ${duration}ms`)
+
+    // After syncing recalls, trigger the matching engine to find new matches for all users
+    console.log("🚀 Triggering matching engine for all users...")
+    MatchingEngine.getInstance().runForAllUsers()
 
     return NextResponse.json({
       success: true,

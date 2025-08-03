@@ -174,4 +174,21 @@ export class MatchingEngine {
       VALUES (${productId}, ${recallId}, ${matchType}, ${confidenceScore}, NOW())
     `
   }
+
+  async runForAllUsers(): Promise<{ totalMatches: number }> {
+    console.log("🏃‍♂️ Running matching engine for all users...")
+    try {
+      const users = await sql<{ id: string }[]>`SELECT id FROM users`
+      let totalMatches = 0
+      for (const user of users) {
+        const result = await this.findMatches(user.id)
+        totalMatches += result.newMatches
+      }
+      console.log(`✅ Finished running matching engine for all users. Found ${totalMatches} new matches.`)
+      return { totalMatches }
+    } catch (error) {
+      console.error("❌ Error running matching engine for all users:", error)
+      return { totalMatches: 0 }
+    }
+  }
 }
