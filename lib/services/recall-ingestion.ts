@@ -102,7 +102,7 @@ export class RecallIngestionService {
           title: recall.product_description || "FDA Food Recall",
           description: recall.reason_for_recall || "",
           date_published: safeDate(recall.recall_initiation_date || recall.report_date || new Date()),
-          recall_date: safeDate(recall.recall_initiation_date || recall.report_date),
+          recall_date: this.safeDate(recall.recall_initiation_date || recall.report_date),
           severity: this.mapFDASeverity(recall.classification),
           product_keywords: this.extractProductKeywords(recall.product_description || ""),
           brand_keywords: this.extractBrandKeywords(recall.recalling_firm || ""),
