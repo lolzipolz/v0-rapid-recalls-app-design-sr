@@ -60,7 +60,7 @@ async function runTests() {
 
   // Summary
   console.log("\n📊 TEST SUMMARY:")
-  console.log("=" * 50)
+  console.log("=".repeat(50))
 
   const passed = results.filter((r) => r.success).length
   const total = results.length

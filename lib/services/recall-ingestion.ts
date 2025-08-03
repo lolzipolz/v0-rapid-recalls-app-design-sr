@@ -118,15 +118,148 @@ export class RecallIngestionService {
   }
 
   private async syncCPSCRecalls(): Promise<number> {
-    console.log("📡 CPSC sync - simulated (no public API)")
-    // CPSC doesn't have a reliable public API, so we'll simulate for now
-    return 0
+    console.log("📡 Fetching CPSC recalls...")
+
+    try {
+      // CPSC doesn't have a reliable public API, but we can try their RSS feed
+      const response = await fetch("https://www.cpsc.gov/Newsroom/News-Releases/RSS", {
+        headers: {
+          "User-Agent": "RapidRecalls/1.0 (contact@rapidrecalls.com)",
+        },
+      })
+
+      if (!response.ok) {
+        console.log("⚠️ CPSC RSS feed not available, skipping...")
+        return 0
+      }
+
+      const rssText = await response.text()
+      const items = this.parseRSSItems(rssText)
+
+      let processedCount = 0
+      for (const item of items.slice(0, 10)) {
+        if (item.title.toLowerCase().includes("recall")) {
+          try {
+            await this.upsertRecall({
+              external_id: `cpsc-${this.generateId(item.title)}`,
+              source: "CPSC",
+              title: item.title,
+              description: item.description,
+              date_published: this.safeDate(item.pubDate || new Date()),
+              severity: this.determineCPSCSeverity(item.title, item.description),
+              product_keywords: this.extractProductKeywords(item.title),
+              brand_keywords: this.extractBrandKeywords(item.title),
+              upc_codes: [],
+              raw_data: item,
+            })
+            processedCount++
+          } catch (error) {
+            console.error(`❌ Failed to process CPSC recall:`, error)
+          }
+        }
+      }
+
+      return processedCount
+    } catch (error) {
+      console.log("⚠️ CPSC sync failed, continuing with other sources...")
+      return 0
+    }
   }
 
   private async syncNHTSARecalls(): Promise<number> {
-    console.log("📡 NHTSA sync - simulated (requires specific parameters)")
-    // NHTSA API requires specific vehicle parameters, so we'll simulate for now
-    return 0
+    console.log("📡 Fetching NHTSA recalls...")
+
+    try {
+      // NHTSA API for recent recalls
+      const currentYear = new Date().getFullYear()
+      const url = `${this.baseUrls.nhtsa}?modelYear=${currentYear}&format=json`
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "RapidRecalls/1.0 (contact@rapidrecalls.com)",
+        },
+      })
+
+      if (!response.ok) {
+        console.log("⚠️ NHTSA API not available, skipping...")
+        return 0
+      }
+
+      const data = await response.json()
+      const recalls = data.results || []
+
+      let processedCount = 0
+      for (const recall of recalls.slice(0, 20)) {
+        try {
+          await this.upsertRecall({
+            external_id: recall.NHTSACampaignNumber || `nhtsa-${recall.NHTSAActionNumber || Date.now()}`,
+            source: "NHTSA",
+            title: `${recall.Make} ${recall.Model} ${recall.ModelYear} - ${recall.Component}`,
+            description: recall.Summary || recall.Defect || "",
+            date_published: this.safeDate(recall.ReportReceivedDate || new Date()),
+            severity: this.mapNHTSASeverity(recall.DefectSeverity),
+            product_keywords: this.extractProductKeywords(`${recall.Make} ${recall.Model} ${recall.Component}`),
+            brand_keywords: this.extractBrandKeywords(recall.Make || ""),
+            upc_codes: [],
+            raw_data: recall,
+          })
+          processedCount++
+        } catch (error) {
+          console.error(`❌ Failed to process NHTSA recall:`, error)
+        }
+      }
+
+      return processedCount
+    } catch (error) {
+      console.log("⚠️ NHTSA sync failed, continuing with other sources...")
+      return 0
+    }
+  }
+
+  private parseRSSItems(rssText: string): Array<{ title: string; description: string; link: string; pubDate: string }> {
+    const items: Array<{ title: string; description: string; link: string; pubDate: string }> = []
+    const itemRegex = /<item>(.*?)<\/item>/gs
+    let match
+
+    while ((match = itemRegex.exec(rssText)) !== null) {
+      const itemContent = match[1]
+      const title = this.extractRSSField(itemContent, "title")
+      const description = this.extractRSSField(itemContent, "description")
+      const link = this.extractRSSField(itemContent, "link")
+      const pubDate = this.extractRSSField(itemContent, "pubDate")
+
+      if (title && description) {
+        items.push({ title, description, link, pubDate })
+      }
+    }
+
+    return items
+  }
+
+  private extractRSSField(content: string, field: string): string {
+    const regex = new RegExp(`<${field}[^>]*>(.*?)<\/${field}>`, "s")
+    const match = content.match(regex)
+    return match ? match[1].replace(/<!\[CDATA\[(.*?)\]\]>/s, "$1").trim() : ""
+  }
+
+  private generateId(text: string): string {
+    return (
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+        .substring(0, 10) + Date.now()
+    )
+  }
+
+  private determineCPSCSeverity(title: string, description: string): "low" | "medium" | "high" {
+    const text = (title + " " + description).toLowerCase()
+    if (text.includes("death") || text.includes("serious injury") || text.includes("choking")) {
+      return "high"
+    }
+    if (text.includes("injury") || text.includes("burn") || text.includes("cut")) {
+      return "medium"
+    }
+    return "low"
   }
 
   private async upsertRecall(recallData: {
@@ -193,6 +326,14 @@ export class RecallIngestionService {
 
     console.log(`⚠️ Unknown FDA classification: ${classification}, defaulting to medium`)
     return "medium"
+  }
+
+  private mapNHTSASeverity(severity: string): string {
+    if (!severity) return "medium"
+    const s = severity.toLowerCase()
+    if (s.includes("high") || s.includes("critical")) return "high"
+    if (s.includes("medium") || s.includes("moderate")) return "medium"
+    return "low"
   }
 
   private extractProductKeywords(text: string): string[] {

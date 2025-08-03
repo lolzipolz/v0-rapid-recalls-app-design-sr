@@ -47,6 +47,10 @@ export async function GET() {
           last_updated: row.last_updated,
         })),
       },
+      environment: {
+        cron_secret_set: !!process.env.CRON_SECRET,
+        node_env: process.env.NODE_ENV,
+      },
     }
 
     console.log("✅ Cron status check completed:", status)
