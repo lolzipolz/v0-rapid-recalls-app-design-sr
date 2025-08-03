@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql, initializeDatabase } from "@/lib/database"
+import { MatchingEngine } from "@/lib/services/matching-engine"
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,9 +87,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Product added: ${name} for user ${userId}`)
 
+    // After adding the product, trigger the matching engine asynchronously
+    const newProduct = products[0]
+    MatchingEngine.getInstance().findMatches(userId, newProduct.id)
+    console.log(`✅ Triggered matching engine for product ${newProduct.id}`)
+
     return NextResponse.json({
       success: true,
-      product: products[0],
+      product: newProduct,
       message: "Product added successfully",
     })
   } catch (error) {
