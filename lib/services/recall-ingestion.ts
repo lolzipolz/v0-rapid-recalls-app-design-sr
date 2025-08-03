@@ -368,4 +368,9 @@ export class RecallIngestionService {
     console.log(`🏷️ Extracted ${brands.length} brand keywords from: "${text.substring(0, 50)}..."`)
     return brands
   }
+
+  private safeDate(input: string | Date | null | undefined): Date {
+  const d = new Date(input ?? "")
+  return isNaN(d.getTime()) ? new Date() : d
+  }
 }
