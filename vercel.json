@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/sync-recalls?secret=this-is-a-cron-secret",
-      "schedule": "0 6 * * *"
+      "schedule": "0 */6 * * *"
     }
   ],
   "functions": {

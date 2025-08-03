@@ -1,113 +1,84 @@
-const fetch = require("node-fetch")
-
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000"
 const CRON_SECRET = process.env.CRON_SECRET || "this-is-a-cron-secret"
 
-async function testCronEndpoint() {
-  console.log("🧪 Testing Cron Endpoint Comprehensive")
-  console.log("=====================================")
+async function testEndpoint(name, url, options = {}) {
+  console.log(`\n🧪 Testing ${name}...`)
+  console.log(`📡 URL: ${url}`)
 
-  // Test 1: Check cron status endpoint
-  console.log("\n1️⃣ Testing cron status endpoint...")
   try {
-    const response = await fetch(`${BASE_URL}/api/cron/status`)
+    const response = await fetch(url, options)
     const data = await response.json()
+
+    console.log(`📊 Status: ${response.status}`)
+    console.log(`📋 Response:`, JSON.stringify(data, null, 2))
 
     if (response.ok) {
-      console.log("✅ Status endpoint working")
-      console.log("📊 Status:", data.status)
-      console.log("🗄️ Database connected:", data.database_connected)
-      console.log("👥 Total users:", data.user_stats?.total_users || 0)
-      console.log("📦 Total products:", data.user_stats?.total_products || 0)
+      console.log(`✅ ${name} - SUCCESS`)
     } else {
-      console.log("❌ Status endpoint failed:", response.status)
-      console.log("📄 Response:", data)
+      console.log(`❌ ${name} - FAILED`)
     }
+
+    return { success: response.ok, data, status: response.status }
   } catch (error) {
-    console.log("❌ Status endpoint error:", error.message)
+    console.log(`💥 ${name} - ERROR:`, error.message)
+    return { success: false, error: error.message }
   }
-
-  // Test 2: Test cron endpoint with correct secret
-  console.log("\n2️⃣ Testing cron endpoint with correct secret...")
-  try {
-    const response = await fetch(`${BASE_URL}/api/cron/sync-recalls?secret=${CRON_SECRET}`, {
-      method: "POST",
-    })
-    const data = await response.json()
-
-    if (response.ok) {
-      console.log("✅ Cron endpoint working with correct secret")
-      console.log("📊 Success:", data.success)
-      console.log("⏱️ Duration:", data.duration)
-      console.log("👥 Users processed:", data.usersProcessed)
-      console.log("🔍 New matches:", data.newMatches)
-    } else {
-      console.log("❌ Cron endpoint failed:", response.status)
-      console.log("📄 Response:", data)
-    }
-  } catch (error) {
-    console.log("❌ Cron endpoint error:", error.message)
-  }
-
-  // Test 3: Test cron endpoint with wrong secret
-  console.log("\n3️⃣ Testing cron endpoint with wrong secret...")
-  try {
-    const response = await fetch(`${BASE_URL}/api/cron/sync-recalls?secret=wrong-secret`, {
-      method: "POST",
-    })
-    const data = await response.json()
-
-    if (response.status === 401) {
-      console.log("✅ Correctly rejected wrong secret")
-      console.log("📄 Response:", data)
-    } else {
-      console.log("❌ Should have rejected wrong secret but got:", response.status)
-      console.log("📄 Response:", data)
-    }
-  } catch (error) {
-    console.log("❌ Wrong secret test error:", error.message)
-  }
-
-  // Test 4: Test cron endpoint with no secret
-  console.log("\n4️⃣ Testing cron endpoint with no secret...")
-  try {
-    const response = await fetch(`${BASE_URL}/api/cron/sync-recalls`, {
-      method: "POST",
-    })
-    const data = await response.json()
-
-    if (response.status === 401) {
-      console.log("✅ Correctly rejected missing secret")
-      console.log("📄 Response:", data)
-    } else {
-      console.log("❌ Should have rejected missing secret but got:", response.status)
-      console.log("📄 Response:", data)
-    }
-  } catch (error) {
-    console.log("❌ No secret test error:", error.message)
-  }
-
-  // Test 5: Test GET method
-  console.log("\n5️⃣ Testing GET method with correct secret...")
-  try {
-    const response = await fetch(`${BASE_URL}/api/cron/sync-recalls?secret=${CRON_SECRET}`, {
-      method: "GET",
-    })
-    const data = await response.json()
-
-    if (response.ok) {
-      console.log("✅ GET method working")
-      console.log("📊 Success:", data.success)
-    } else {
-      console.log("❌ GET method failed:", response.status)
-      console.log("📄 Response:", data)
-    }
-  } catch (error) {
-    console.log("❌ GET method error:", error.message)
-  }
-
-  console.log("\n🏁 Cron endpoint testing complete!")
 }
 
-// Run the test
-testCronEndpoint().catch(console.error)
+async function runTests() {
+  console.log("🚀 Starting comprehensive cron tests...")
+  console.log(`🌐 Base URL: ${BASE_URL}`)
+  console.log(`🔑 Secret: ${CRON_SECRET}`)
+
+  const results = []
+
+  // Test 1: Cron status endpoint
+  results.push(await testEndpoint("Cron Status", `${BASE_URL}/api/cron/status`))
+
+  // Test 2: Cron sync with GET (correct secret)
+  results.push(
+    await testEndpoint("Cron Sync GET (with secret)", `${BASE_URL}/api/cron/sync-recalls?secret=${CRON_SECRET}`),
+  )
+
+  // Test 3: Cron sync with POST (correct secret)
+  results.push(
+    await testEndpoint("Cron Sync POST (with secret)", `${BASE_URL}/api/cron/sync-recalls?secret=${CRON_SECRET}`, {
+      method: "POST",
+    }),
+  )
+
+  // Test 4: Cron sync without secret (should fail)
+  results.push(await testEndpoint("Cron Sync (no secret - should fail)", `${BASE_URL}/api/cron/sync-recalls`))
+
+  // Test 5: Cron sync with wrong secret (should fail)
+  results.push(
+    await testEndpoint(
+      "Cron Sync (wrong secret - should fail)",
+      `${BASE_URL}/api/cron/sync-recalls?secret=wrong-secret`,
+    ),
+  )
+
+  // Summary
+  console.log("\n📊 TEST SUMMARY:")
+  console.log("=" * 50)
+
+  const passed = results.filter((r) => r.success).length
+  const total = results.length
+
+  console.log(`✅ Passed: ${passed}/${total}`)
+  console.log(`❌ Failed: ${total - passed}/${total}`)
+
+  if (passed === total) {
+    console.log("🎉 All tests passed!")
+  } else {
+    console.log("⚠️ Some tests failed. Check the logs above.")
+  }
+
+  // Environment check
+  console.log("\n🔧 ENVIRONMENT CHECK:")
+  console.log(`CRON_SECRET: ${process.env.CRON_SECRET ? "✅ Set" : "❌ Missing"}`)
+  console.log(`BASE_URL: ${process.env.BASE_URL || "❌ Using localhost"}`)
+}
+
+// Run the tests
+runTests().catch(console.error)

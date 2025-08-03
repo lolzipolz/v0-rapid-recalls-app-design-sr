@@ -1,104 +1,46 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { RecallIngestionService } from "@/lib/services/recall-ingestion"
-import { MatchingEngine } from "@/lib/services/matching-engine"
-import { NotificationService } from "@/lib/services/notification-service"
-import { sql } from "@/lib/database"
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
+  console.log("🔍 GET request received for cron endpoint")
+
   try {
-    // For debugging - log all request details
-    console.log("🔍 Cron request received:", {
-      method: request.method,
-      url: request.url,
-      headers: Object.fromEntries(request.headers.entries()),
-    })
-
-    // Simple security check using URL parameter
+    // Check authentication
     const { searchParams } = new URL(request.url)
     const secretParam = searchParams.get("secret")
     const envSecret = process.env.CRON_SECRET
 
-    console.log("🔐 Auth check detailed:", {
-      secretParam: secretParam,
-      secretParamLength: secretParam?.length,
-      envSecret: envSecret,
-      envSecretLength: envSecret?.length,
+    console.log("🔐 GET Auth check:", {
+      secretParam: secretParam ? "provided" : "missing",
+      envSecret: envSecret ? "set" : "missing",
       match: secretParam === envSecret,
-      secretParamType: typeof secretParam,
-      envSecretType: typeof envSecret,
     })
 
     if (secretParam !== envSecret) {
-      console.log("❌ Authentication failed - values don't match")
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-          debug: {
-            hasSecret: !!secretParam,
-            hasEnvVar: !!envSecret,
-            secretLength: secretParam?.length,
-            envLength: envSecret?.length,
-          },
-        },
-        { status: 401 },
-      )
+      console.log("❌ GET Authentication failed")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log("🚀 Starting daily recall sync...")
-    const startTime = Date.now()
+    console.log("✅ GET Authentication successful")
 
-    // 1. Sync recalls from government APIs
-    console.log("📡 Syncing recalls from government APIs...")
+    // Run recall sync
     const recallService = RecallIngestionService.getInstance()
-    const syncResults = await recallService.syncAllRecalls()
+    const results = await recallService.syncAllRecalls()
 
-    // 2. Run matching for all users with products
-    console.log("🔍 Running matching engine for all users...")
-    const users = await sql`
-      SELECT DISTINCT user_id as id 
-      FROM products 
-      WHERE created_at >= NOW() - INTERVAL '1 year'
-    `
+    console.log("🎯 GET Sync completed:", results)
 
-    const matchingEngine = MatchingEngine.getInstance()
-    let totalNewMatches = 0
-
-    for (const user of users) {
-      try {
-        const matchResult = await matchingEngine.findMatches(user.id)
-        totalNewMatches += matchResult.newMatches || 0
-      } catch (error) {
-        console.error(`Matching failed for user ${user.id}:`, error)
-      }
-    }
-
-    // 3. Send notifications for new matches
-    console.log("📧 Sending notifications...")
-    const notificationService = NotificationService.getInstance()
-    await notificationService.sendPendingNotifications()
-
-    const totalTime = Date.now() - startTime
-
-    const summary = {
+    return NextResponse.json({
       success: true,
+      message: "Recall sync completed",
+      results,
       timestamp: new Date().toISOString(),
-      duration: `${totalTime}ms`,
-      syncResults,
-      usersProcessed: users.length,
-      newMatches: totalNewMatches,
-      message: "Daily recall sync completed successfully",
-    }
-
-    console.log("✅ Daily recall sync completed:", summary)
-
-    return NextResponse.json(summary)
+    })
   } catch (error) {
-    console.error("❌ Recall sync failed:", error)
+    console.error("❌ GET Cron job failed:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "Recall sync failed",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
       { status: 500 },
@@ -106,41 +48,49 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Also support GET for manual testing
-export async function GET(request: NextRequest) {
-  console.log("🔍 GET request received for cron endpoint")
+export async function POST(request: NextRequest) {
+  console.log("🔍 POST request received for cron endpoint")
 
-  const { searchParams } = new URL(request.url)
-  const secret = searchParams.get("secret")
-  const envSecret = process.env.CRON_SECRET
+  try {
+    // Check authentication
+    const { searchParams } = new URL(request.url)
+    const secretParam = searchParams.get("secret")
+    const envSecret = process.env.CRON_SECRET
 
-  console.log("🔐 GET Auth check detailed:", {
-    secretParam: secret,
-    secretParamLength: secret?.length,
-    envSecret: envSecret,
-    envSecretLength: envSecret?.length,
-    match: secret === envSecret,
-    secretParamType: typeof secret,
-    envSecretType: typeof envSecret,
-  })
+    console.log("🔐 POST Auth check:", {
+      secretParam: secretParam ? "provided" : "missing",
+      envSecret: envSecret ? "set" : "missing",
+      match: secretParam === envSecret,
+    })
 
-  if (secret !== envSecret) {
-    console.log("❌ GET Authentication failed - values don't match")
+    if (secretParam !== envSecret) {
+      console.log("❌ POST Authentication failed")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    console.log("✅ POST Authentication successful")
+
+    // Run recall sync
+    const recallService = RecallIngestionService.getInstance()
+    const results = await recallService.syncAllRecalls()
+
+    console.log("🎯 POST Sync completed:", results)
+
+    return NextResponse.json({
+      success: true,
+      message: "Recall sync completed",
+      results,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error("❌ POST Cron job failed:", error)
     return NextResponse.json(
       {
-        error: "Unauthorized",
-        debug: {
-          hasSecret: !!secret,
-          hasEnvVar: !!envSecret,
-          secretLength: secret?.length,
-          envLength: envSecret?.length,
-        },
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
-      { status: 401 },
+      { status: 500 },
     )
   }
-
-  // Convert to POST request for testing
-  console.log("✅ GET auth passed, converting to POST")
-  return POST(request)
 }
