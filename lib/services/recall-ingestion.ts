@@ -1,4 +1,5 @@
 import { sql } from "@/lib/database"
+import { safeDate } from "@/lib/utils"
 
 export class RecallIngestionService {
   private static instance: RecallIngestionService
@@ -100,7 +101,8 @@ export class RecallIngestionService {
           source: "FDA",
           title: recall.product_description || "FDA Food Recall",
           description: recall.reason_for_recall || "",
-          date_published: this.safeDate(recall.recall_initiation_date || recall.report_date || new Date()),
+          date_published: safeDate(recall.recall_initiation_date || recall.report_date || new Date()),
+          recall_date: safeDate(recall.recall_initiation_date || recall.report_date),
           severity: this.mapFDASeverity(recall.classification),
           product_keywords: this.extractProductKeywords(recall.product_description || ""),
           brand_keywords: this.extractBrandKeywords(recall.recalling_firm || ""),
@@ -145,7 +147,8 @@ export class RecallIngestionService {
               source: "CPSC",
               title: item.title,
               description: item.description,
-              date_published: this.safeDate(item.pubDate || new Date()),
+              date_published: safeDate(item.pubDate || new Date()),
+              recall_date: safeDate(item.pubDate),
               severity: this.determineCPSCSeverity(item.title, item.description),
               product_keywords: this.extractProductKeywords(item.title),
               brand_keywords: this.extractBrandKeywords(item.title),
@@ -196,7 +199,8 @@ export class RecallIngestionService {
             source: "NHTSA",
             title: `${recall.Make} ${recall.Model} ${recall.ModelYear} - ${recall.Component}`,
             description: recall.Summary || recall.Defect || "",
-            date_published: this.safeDate(recall.ReportReceivedDate || new Date()),
+            date_published: safeDate(recall.ReportReceivedDate || new Date()),
+            recall_date: safeDate(recall.ReportReceivedDate),
             severity: this.mapNHTSASeverity(recall.DefectSeverity),
             product_keywords: this.extractProductKeywords(`${recall.Make} ${recall.Model} ${recall.Component}`),
             brand_keywords: this.extractBrandKeywords(recall.Make || ""),
@@ -268,6 +272,7 @@ export class RecallIngestionService {
     title: string
     description: string
     date_published: Date
+    recall_date: Date
     severity: string
     product_keywords: string[]
     brand_keywords: string[]
@@ -279,7 +284,7 @@ export class RecallIngestionService {
     try {
       await sql`
         INSERT INTO recalls (
-          external_id, source, title, description, date_published, 
+          external_id, source, title, description, date_published, recall_date,
           severity, product_keywords, brand_keywords, upc_codes, raw_data
         ) VALUES (
           ${recallData.external_id},
@@ -287,6 +292,7 @@ export class RecallIngestionService {
           ${recallData.title},
           ${recallData.description},
           ${recallData.date_published},
+          ${recallData.recall_date},
           ${recallData.severity},
           ${recallData.product_keywords},
           ${recallData.brand_keywords},
@@ -302,6 +308,7 @@ export class RecallIngestionService {
           brand_keywords = EXCLUDED.brand_keywords,
           upc_codes = EXCLUDED.upc_codes,
           raw_data = EXCLUDED.raw_data,
+          recall_date = EXCLUDED.recall_date,
           updated_at = NOW()
       `
       console.log(`✅ Successfully upserted recall: ${recallData.external_id}`)
@@ -309,11 +316,6 @@ export class RecallIngestionService {
       console.error(`❌ Database error for recall ${recallData.external_id}:`, error)
       throw error
     }
-  }
-
-  private safeDate(input: string | Date | undefined | null): Date {
-    const d = new Date(input ?? "")
-    return isNaN(d.getTime()) ? new Date() : d
   }
 
   private mapFDASeverity(classification: string): string {

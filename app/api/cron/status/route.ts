@@ -1,71 +1,62 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/database"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log("🔍 Checking cron status...")
+    // Check for authorization
+    const authHeader = request.headers.get("authorization")
+    const cronSecret = process.env.CRON_SECRET
 
-    // Check database connection
+    if (!cronSecret) {
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Check database connectivity
     const dbCheck = await sql`SELECT NOW() as current_time`
 
-    // Get recall counts by source
-    const recallCounts = await sql`
+    // Get recall statistics
+    const recallStats = await sql`
       SELECT 
         source,
         COUNT(*) as count,
-        MAX(date_published) as latest_recall,
-        MAX(updated_at) as last_updated
+        MAX(date_published) as latest_recall
       FROM recalls 
       GROUP BY source
-      ORDER BY source
+      ORDER BY count DESC
     `
 
-    // Get total recall count
-    const totalCount = await sql`SELECT COUNT(*) as total FROM recalls`
-
-    // Get recent recalls (last 24 hours)
+    // Get recent recalls
     const recentRecalls = await sql`
-      SELECT COUNT(*) as recent_count 
+      SELECT external_id, source, title, date_published, severity
       FROM recalls 
-      WHERE created_at >= NOW() - INTERVAL '24 hours'
+      ORDER BY date_published DESC 
+      LIMIT 5
     `
 
-    const status = {
-      success: true,
-      timestamp: new Date().toISOString(),
+    return NextResponse.json({
+      status: "healthy",
       database: {
         connected: true,
-        current_time: dbCheck[0]?.current_time,
+        current_time: dbCheck[0].current_time,
       },
       recalls: {
-        total: Number.parseInt(totalCount[0]?.total || "0"),
-        recent_24h: Number.parseInt(recentRecalls[0]?.recent_count || "0"),
-        by_source: recallCounts.map((row) => ({
-          source: row.source,
-          count: Number.parseInt(row.count),
-          latest_recall: row.latest_recall,
-          last_updated: row.last_updated,
-        })),
+        by_source: recallStats,
+        recent: recentRecalls,
+        total: recallStats.reduce((sum, stat) => sum + Number.parseInt(stat.count), 0),
       },
-      environment: {
-        cron_secret_set: !!process.env.CRON_SECRET,
-        node_env: process.env.NODE_ENV,
-      },
-    }
-
-    console.log("✅ Cron status check completed:", status)
-    return NextResponse.json(status)
+      timestamp: new Date().toISOString(),
+    })
   } catch (error) {
-    console.error("❌ Cron status check failed:", error)
-
+    console.error("❌ Status check failed:", error)
     return NextResponse.json(
       {
-        success: false,
+        status: "error",
         error: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
-        database: {
-          connected: false,
-        },
       },
       { status: 500 },
     )

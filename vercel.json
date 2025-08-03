@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/sync-recalls?secret=this-is-a-cron-secret",
-      "schedule": "25 6 * * *"
+      "path": "/api/cron/sync-recalls",
+      "schedule": "0 */6 * * *"
     }
   ],
   "functions": {
